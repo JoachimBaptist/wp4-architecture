@@ -1,10 +1,11 @@
 # WE BUILD - Conformance Specification:  Credential Issuance
 
-Version 1.3
-Date: 28 August 2026
+Version 1.4
+Date: TBD
 
 **Revision history**
 
+* Version 1.4 (unreleased): Pre-flight adoption of OpenID4VCI 1.1 (see the [ADR](../adr/openid4vci-1-1.md)). Adds `invalid_tx_code`, Credential Issuer Identifier path normalisation, optional `credential_metadata` on the Credential Response, and OPTIONAL Interactive Authorization.
 * Version 1.3 (28 August 2026): Clarified that re-issuance and the Deferred Credential Endpoint are OPTIONAL for Issuers, resolving issue [#297](https://github.com/webuild-consortium/wp4-architecture/issues/297).
 * Version 1.2 (15 July 2026): Added the re-issuance chapter, resolving issue [#244](https://github.com/webuild-consortium/wp4-architecture/issues/244).
 * Version 1.1 (10 July 2026): Added the pre-authorised code-flow to support payments
@@ -59,6 +60,7 @@ Date: 28 August 2026
   - [7.6 Deferred Credential Endpoint](#76-deferred-credential-endpoint)
   - [7.7 Server Metadata](#77-server-metadata)
   - [7.8 Re-issuance](#78-re-issuance)
+  - [7.9 Interactive Authorization](#79-interactive-authorization)
 - [8. Interface Definitions](#8-interface-definitions)
   - [8.1 WU Invocation Interface](#81-wu-invocation-interface)
   - [8.2 Credential Offer Interface](#82-credential-offer-interface)
@@ -77,7 +79,7 @@ This document defines the **WE BUILD Consortium Conformance Specification (CS)**
 
 It profiles:
 
-* OpenID for Verifiable Credential Issuance (OpenID4VCI) v1.0 [1]
+* OpenID for Verifiable Credential Issuance (OpenID4VCI) v1.0 [1], with the additions of v1.1 [10] profiled as described in NOTE **CS01_06**
 * The OpenID4VC High Assurance Interoperability Profile (HAIP) 1.0 - Implementers Draft 1 [2]
 
 The aim is to ensure that Wallet Units and Credential Issuers within the WE BUILD ecosystem interoperate consistently for the **issuance of SD-JWT-VC credentials** [3] with high security and privacy.
@@ -149,6 +151,14 @@ Both modes are required in this profile.
 
 > [!NOTE]
 > **CS01_05**: OpenID4VCI [1] section 13.6.2 describes a Transaction Code phishing attack, in which an attacker operating a Credential Issuer site induces the Holder to enter into the Wallet a Transaction Code issued by an unrelated service, such as a payment service, and thereby obtains access to that service. OpenID4VCI RECOMMENDS that Wallets interact with trusted Credential Issuers only, and states that the Wallet MAY show the End-User the Credential Issuer endpoint before the Transaction Code is sent. Because this profile requires a Transaction Code for the Pre-Authorised Code grant (NOTE **CS01_03**), both mitigations are profiled as normative requirements in section 7.2.
+
+> **CS01_06**: OpenID4VCI 1.1 [10] is an editor's draft and is not published. It is adopted here as a pre-flight profile under the [pre-flight CS ADR](../adr/pre-flight-CS.md), on the basis that its change log records it as 1.0 Final plus additions, and that nothing in 1.0 was withdrawn. Only the additions named in this specification are profiled. A WU or Issuer conforming to the v1.0 profile remains conformant; none of the 1.1 additions is made mandatory where 1.0 did not already mandate the behaviour. Where the published text of 1.1 differs from what is profiled here, the published text prevails and this specification is revised.
+
+> **CS01_07**: The editor's draft of OpenID4VCI 1.1 [10] contradicts itself on the naming of Interactive Authorization identifiers. Its change log records renaming the presentation binding prefix to `iae:`, the response mode to `iae_post`, and the Authorisation Server metadata parameters to `interactive_authorization_endpoint` and `require_interactive_authorization_request`, while the normative text uses `ia:`, `ia_post` and `ia_post.jwt`, `authorization_challenge_endpoint` and `require_interactive_authorization`. This specification follows the normative text. Implementations SHOULD keep these identifiers configurable until the discrepancy is resolved. The discrepancy is reported to the OpenID Foundation.
+
+> **CS01_08**: The editor's draft of OpenID4VCI 1.1 [10] also specifies the Interactive Authorization presentation binding inconsistently between credential formats. For SD-JWT-VC it states that the Key Binding JWT `aud` is the derived Origin of the Authorization Challenge Endpoint prefixed with `ia:`, while the example in the same section shows the full endpoint URL. For JWT VC JSON and LDP VC it states the endpoint URL, and for ISO mdoc the endpoint URL with no prefix. Since this value is what binds a presentation to the Authorisation Server that requested it (section 7.9), a mismatch causes verification to fail, or to succeed where it should not. For testing, this specification pins the SD-JWT-VC value to the derived Origin, matching the normative sentence rather than the example. This is provisional and is reported to the OpenID Foundation.
+
+> **CS01_09**: OpenID4VCI v1.0 [1] returns `invalid_grant` both for a wrong Transaction Code and for a `pre-authorized_code` that is expired, already used or invalidated, so a WU cannot tell "the Holder mistyped the code" from "this offer is finished". Since this profile REQUIRES a Transaction Code on every Pre-Authorised Code offer (NOTE **CS01_03**) and REQUIRES Issuers to invalidate the code after a number of failed attempts, that is the most common error this profile produces, and the distinction is one the Holder sees. OpenID4VCI 1.1 [10] adds `invalid_tx_code` for the wrong-code case. The new code is visible on the wire: an Issuer enabling it changes what unmodified WUs receive, so the change is announced rather than made silently.
 
 # 6. High-level Flows
 
@@ -415,6 +425,7 @@ WUs **MUST**:
 WUs **SHOULD**:
 
 1. Display the Credential Issuer endpoint to which a Transaction Code will be sent, and ask the Holder for confirmation, before submitting the Token Request (OpenID4VCI [1], section 13.6.2, NOTE **CS01_05**).
+2. Treat `invalid_tx_code` as a retryable wrong entry and prompt the Holder for the Transaction Code again, and `invalid_grant` as an offer that cannot be redeemed, ending the flow (NOTE **CS01_09**). A WU that does not recognise `invalid_tx_code` MUST treat it as a terminal error rather than retry blindly.
 
 ## 7.3 Authorisation Endpoint and PAR
 
@@ -464,8 +475,8 @@ In the Pre-Authorised Code Flow, Issuers **MUST** additionally:
 
 1. Reject Token Requests that use the `urn:ietf:params:oauth:grant-type:pre-authorized_code` grant type without client authentication with a valid WIA. Anonymous access (`pre-authorized_grant_anonymous_access_supported`) MUST NOT be offered.
 2. Verify that the `pre-authorized_code` was issued by their AS, has not expired and has not been used before, returning the `invalid_grant` error otherwise (OpenID4VCI [1], Token Error Response).
-3. Verify the Transaction Code value presented in the `tx_code` parameter, returning `invalid_grant` if the value is wrong, and `invalid_request` if a Transaction Code is provided but not expected, or expected but not provided.
-4. Limit the number of failed Transaction Code attempts for a given `pre-authorized_code` and invalidate that code once the limit is exceeded (OpenID4VCI [1], section 13.6.1).
+3. Verify the Transaction Code value presented in the `tx_code` parameter, returning `invalid_tx_code` if the value is wrong (OpenID4VCI 1.1 [10], Token Error Response; NOTE **CS01_09**), and `invalid_request` if a Transaction Code is provided but not expected, or expected but not provided.
+4. Limit the number of failed Transaction Code attempts for a given `pre-authorized_code` and invalidate that code once the limit is exceeded (OpenID4VCI [1], section 13.6.1). Once the code is invalidated, subsequent requests return `invalid_grant` rather than `invalid_tx_code`, which is what lets the WU tell a remaining attempt from an exhausted offer.
 
 In the Pre-Authorised Code Flow, Issuers **SHOULD**:
 
@@ -493,6 +504,8 @@ Wallets **MUST**:
 4. Where the Issuer requires key-attestation levels, present a KA whose `key_storage` and `user_authentication` meet or exceed the required levels; a higher level satisfies the requirement, and a lower level MUST NOT be used.
 
 ## 7.6 Deferred Credential Endpoint
+
+Issuers **MAY** include a `credential_metadata` object in the Credential Response, carrying display and usage information for the Credential just issued (OpenID4VCI 1.1 [10], Credential Response). Where a WU receives it, that object takes precedence over Credential Format-specific mechanisms, which in turn take precedence over the `credential_metadata` published in Credential Issuer metadata.
 
 Issuers **MAY** support a `deferred_credential_endpoint`. Support for deferred issuance is OPTIONAL for Issuers, as in OpenID4VCI [1].
 
@@ -533,6 +546,12 @@ Wallets **MUST**:
 
 1. Retrieve and process Issuer metadata, including `credential_configurations_supported` and the `scope` value of each entry.
 2. Resolve the `credential_configuration_ids` values of a Credential Offer against that metadata, and use the resolved `scope` values when constructing authorisation requests.
+3. Form the Credential Issuer Metadata URL by inserting `/.well-known/openid-credential-issuer` between the host component and the path component of the Credential Issuer Identifier, removing any terminating `/` from the identifier first (OpenID4VCI 1.1 [10], Credential Issuer Metadata Retrieval). So `https://issuer.example.com/tenant` and `https://issuer.example.com/tenant/` both resolve to `https://issuer.example.com/.well-known/openid-credential-issuer/tenant`. OpenID4VCI v1.0 [1] omits the normalisation, which leaves multi-tenant Issuers open to two conformant Wallets disagreeing about where a tenant publishes its metadata.
+
+Issuers that support Interactive Authorization (section 7.9) **MUST**:
+
+1. Publish `authorization_challenge_endpoint` in Authorisation Server metadata. Its presence is what tells a WU that Interactive Authorization is available (OpenID4VCI 1.1 [10], Authorization Server Metadata; NOTE **CS01_07**).
+2. Publish `require_interactive_authorization` only alongside that endpoint, and only where Interactive Authorization is the sole accepted path to issuance. Setting it excludes every WU that does not implement the mechanism, so it MUST NOT be set in an ecosystem-wide deployment while that remains the common case.
 
 Issuers **MAY**:
 
@@ -557,6 +576,31 @@ WUs **MUST**:
 5. Delete the replaced attestation after successful re-issuance and no longer present it (ARF 2.9 [6], ISSU_62).
 
 **Wallet Unit Attestation.** On the `refresh_token` grant, the WU re-presents the WIA as client authentication at the Token Endpoint, in the same way as on the original Token Request (section 7.4), together with the DPoP proof for the key to which the refresh token is bound. Re-issuance of the WIA and KA themselves takes place without User action (ARF 2.9 [6], ISSU_42). Where the WUA has rotated, the WU presents the current valid WIA and, at the Credential Endpoint, a Key Attestation for the current keys, which the Issuer verifies as for first issuance. CS-04 [7] is authoritative for WUA structure, validity, revocation and binding, and this specification references it rather than restating those rules (section 7.1, item 6).
+
+## 7.9 Interactive Authorization
+
+Support for Interactive Authorization is OPTIONAL for Issuers and for WUs. An Issuer that does not support it, and a WU that does not implement it, remain conformant with this specification. This section applies where it is supported.
+
+Interactive Authorization lets an Issuer qualify the Holder before issuing, without sending the WU out to a browser. It is relevant to this profile because the Pre-Authorised Code grant binds the code to a shared secret delivered over a second channel and not to the Holder (NOTES **CS01_03** and **CS01_04**); requiring the Holder to present a Credential the Issuer trusts binds issuance to the person instead. It does not relax the Transaction Code requirement in section 7.2.
+
+Issuers that support Interactive Authorization **MUST**:
+
+1. Expose an Authorization Challenge Endpoint and publish it in Authorisation Server metadata (section 7.7), accepting the parameters defined by OAuth 2.0 for First-Party Applications [11] together with the `interaction_types_supported` parameter defined by OpenID4VCI 1.1 [10].
+2. Respond to a request that cannot yet be authorised with HTTP 403 and the `insufficient_authorization` error, naming exactly one required interaction in `interaction_type_required`, which MUST be one the WU listed. Where the Issuer requires an interaction type the WU did not list, return `missing_interaction_type`.
+3. Generate a fresh `auth_session` value on every challenge response, with at least 256 bits of entropy, and treat it as opaque to the WU.
+4. Where DPoP is in use, bind `auth_session` to the DPoP public key, verify the DPoP proof on every request carrying an `auth_session`, and reject a request presenting a different key.
+5. For the `urn:openid:dcp:ia:openid4vp_presentation` interaction type, bind the OpenID4VP `nonce` to the `auth_session` and verify that the presentation used that nonce. This is the defence against session fixation.
+6. For the same interaction type, require the presentation to be bound to this Authorisation Server's own Authorization Challenge Endpoint, as specified per Credential Format by OpenID4VCI 1.1 [10] and pinned for testing by NOTE **CS01_08**. This is the defence against a malicious Authorisation Server relaying another server's challenge.
+7. For the `urn:openid:dcp:ia:auth_via_web` interaction type, omit `auth_session` from the challenge response, treat the returned `request_uri` as single-use, and where PKCE was used in the initial challenge request, enforce the `code_verifier` in the intermediate request that follows.
+
+WUs that support Interactive Authorization **MUST**:
+
+1. List every interaction type they can satisfy in `interaction_types_supported`, and include `code_challenge` and `code_challenge_method` whenever `urn:openid:dcp:ia:auth_via_web` is listed.
+2. Echo the most recently received `auth_session` on every subsequent request in the exchange.
+3. For the `urn:openid:dcp:ia:openid4vp_presentation` interaction type, verify that `expected_origins`, where present, contains only the derived Origin of the Authorization Challenge Endpoint the request arrived from, and refuse the request otherwise.
+4. For the `urn:openid:dcp:ia:auth_via_web` interaction type, open the `request_uri` in an external user agent. A WU MUST NOT use an embedded user agent (RFC 8252, section 8.12).
+
+Interactive Authorization is an alternative to Pushed Authorisation Requests, not an addition to them: where it is used, the authorisation request is carried by the Authorization Challenge Endpoint and the requirements of section 7.3 do not apply to that exchange. The Token Endpoint requirements of section 7.4 apply unchanged to the resulting authorisation code, including WIA client authentication.
 
 # 8. Interface Definitions
 
@@ -791,3 +835,7 @@ Profiles may define additional constraints for specific WE BUILD credential type
 [8] IETF (2023) RFC 9449: OAuth 2.0 Demonstrating Proof of Possession (DPoP). Available at: [https://www.rfc-editor.org/rfc/rfc9449](https://www.rfc-editor.org/rfc/rfc9449) (Accessed: 5 June 2026).
 
 [9] European Digital Identity Cooperation Group (2025) The European Digital Identity Wallet Architecture and Reference Framework, Discussion Paper for Topic B: Re-issuance and batch issuance of PIDs and Attestations, version 0.9, 17 February. Available at: [https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework/blob/v2.9.0/docs/discussion-topics/b-re-issuance-and-batch-issuance-of-pids-and-attestations.md](https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework/blob/v2.9.0/docs/discussion-topics/b-re-issuance-and-batch-issuance-of-pids-and-attestations.md) (Accessed: 10 July 2026).
+
+[10] OpenID Foundation (2026) OpenID for Verifiable Credential Issuance 1.1, editor's draft -01. Available at: [https://github.com/openid/OpenID4VCI/blob/main/1.1/openid-4-verifiable-credential-issuance-1_1.md](https://github.com/openid/OpenID4VCI/blob/main/1.1/openid-4-verifiable-credential-issuance-1_1.md). NOT a published specification; see NOTE **CS01_06**.
+
+[11] IETF (2026) OAuth 2.0 for First-Party Applications, draft-ietf-oauth-first-party-apps-04. Available at: [https://datatracker.ietf.org/doc/draft-ietf-oauth-first-party-apps/](https://datatracker.ietf.org/doc/draft-ietf-oauth-first-party-apps/). An Internet-Draft, not an RFC.
