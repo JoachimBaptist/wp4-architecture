@@ -138,7 +138,10 @@ that defends against request forwarding, so a mismatch is a verification that
 silently fails or silently passes. CS-01 pins one interpretation for testing
 and records that it is provisional.
 
-Both are reported to the OpenID Foundation as specification defects. Neither
+Both are reported to the OpenID Foundation as specification defects
+([811](https://github.com/openid/OpenID4VCI/issues/811),
+[812](https://github.com/openid/OpenID4VCI/issues/812); a third, the mdoc
+handover hash, is [814](https://github.com/openid/OpenID4VCI/issues/814)). Neither
 is worked around in CS-01 beyond pinning a value for testing.
 
 Per the pre-flight CS ADR, what ITB+ finds is reported back to WP4 and informs
