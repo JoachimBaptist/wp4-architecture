@@ -5,7 +5,7 @@ Date: 12 October 2026
 
 **Revision history**
 
-* Version 1.4 (12 October 2026): Removed the requirements to use the WIA `cnf` key as the DPoP key and to check the Access Token `cnf.jkt`, following TS-03 v1.5.2, resolving issue [#330](https://github.com/webuild-consortium/wp4-architecture/issues/330).
+* Version 1.4 (12 October 2026): Aligned with TS-03 v1.5.2, resolving issue [#330](https://github.com/webuild-consortium/wp4-architecture/issues/330).
 * Version 1.3 (28 August 2026): Clarified that re-issuance and the Deferred Credential Endpoint are OPTIONAL for Issuers, resolving issue [#297](https://github.com/webuild-consortium/wp4-architecture/issues/297).
 * Version 1.2 (15 July 2026): Added the re-issuance chapter, resolving issue [#244](https://github.com/webuild-consortium/wp4-architecture/issues/244).
 * Version 1.1 (10 July 2026): Added the pre-authorised code-flow to support payments
