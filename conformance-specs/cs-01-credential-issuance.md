@@ -154,7 +154,7 @@ Both modes are required in this profile.
 
 > **CS01_06**: OpenID4VCI 1.1 [10] is an editor's draft and is not published. It is adopted here as a pre-flight profile under the [pre-flight CS ADR](../adr/pre-flight-CS.md), on the basis that its change log records it as 1.0 Final plus additions, and that nothing in 1.0 was withdrawn. Only the additions named in this specification are profiled. A WU or Issuer conforming to the v1.0 profile remains conformant; none of the 1.1 additions is made mandatory where 1.0 did not already mandate the behaviour. Where the published text of 1.1 differs from what is profiled here, the published text prevails and this specification is revised.
 
-> **CS01_07**: The editor's draft of OpenID4VCI 1.1 [10] contradicts itself on the naming of Interactive Authorization identifiers. Its change log records renaming the presentation binding prefix to `iae:`, the response mode to `iae_post`, and the Authorisation Server metadata parameters to `interactive_authorization_endpoint` and `require_interactive_authorization_request`, while the normative text uses `ia:`, `ia_post` and `ia_post.jwt`, `authorization_challenge_endpoint` and `require_interactive_authorization`. This specification follows the normative text. Implementations SHOULD keep these identifiers configurable until the discrepancy is resolved. The discrepancy is reported to the OpenID Foundation.
+> **CS01_07**: The editor's draft of OpenID4VCI 1.1 [10] contradicts itself on the naming of Interactive Authorization identifiers. Its change log records renaming the presentation binding prefix to `iae:`, the response mode to `iae_post`, and the Authorisation Server metadata parameters to `interactive_authorization_endpoint` and `require_interactive_authorization_request`, while the normative text uses `ia:`, `ia_post` and `ia_post.jwt`, `authorization_challenge_endpoint` and `require_interactive_authorization`. The normative text is not internally consistent either: the ISO mdoc binding section names its handover `OpenID4VCIIAEHandover`, carrying the `IAE` spelling the change log describes into a section that otherwise uses `ia`. This specification follows the normative text, and pins the mdoc handover label as written. Implementations SHOULD keep these identifiers configurable until the discrepancy is resolved. The discrepancy is reported to the OpenID Foundation.
 
 > **CS01_08**: The editor's draft of OpenID4VCI 1.1 [10] also specifies the Interactive Authorization presentation binding inconsistently between credential formats. For SD-JWT-VC it states that the Key Binding JWT `aud` is the derived Origin of the Authorization Challenge Endpoint prefixed with `ia:`, while the example in the same section shows the full endpoint URL. For JWT VC JSON and LDP VC it states the endpoint URL, and for ISO mdoc the endpoint URL with no prefix. Since this value is what binds a presentation to the Authorisation Server that requested it (section 7.9), a mismatch causes verification to fail, or to succeed where it should not. For testing, this specification pins the SD-JWT-VC value to the derived Origin, matching the normative sentence rather than the example. This is provisional and is reported to the OpenID Foundation.
 
@@ -503,9 +503,9 @@ Wallets **MUST**:
 3. Where the Issuer requires a Key Attestation, include the KA in the `key_attestation` header of the `jwt` proof, signed by the key at index 0 of `attested_keys` (TS-03 [5], clause 2.2.2.1; CS-04 [7]).
 4. Where the Issuer requires key-attestation levels, present a KA whose `key_storage` and `user_authentication` meet or exceed the required levels; a higher level satisfies the requirement, and a lower level MUST NOT be used.
 
-## 7.6 Deferred Credential Endpoint
-
 Issuers **MAY** include a `credential_metadata` object in the Credential Response, carrying display and usage information for the Credential just issued (OpenID4VCI 1.1 [10], Credential Response). Where a WU receives it, that object takes precedence over Credential Format-specific mechanisms, which in turn take precedence over the `credential_metadata` published in Credential Issuer metadata.
+
+## 7.6 Deferred Credential Endpoint
 
 Issuers **MAY** support a `deferred_credential_endpoint`. Support for deferred issuance is OPTIONAL for Issuers, as in OpenID4VCI [1].
 
@@ -727,7 +727,8 @@ Where the Issuer supports re-issuance (section 6.4), the Token Endpoint also sup
 
 In line with the OpenID4VCI [1] Token Error Response, the AS returns:
 
-* `invalid_grant` (for example, an expired, revoked or unknown refresh token), the WU MUST fall back to the full Authorisation Code Flow with PAR (section 6.1) or a new Credential Offer (section 6.2). The `pre-authorized_code` is invalid, expired or already used, or the Transaction Code value is wrong
+* `invalid_grant` (for example, an expired, revoked or unknown refresh token), the WU MUST fall back to the full Authorisation Code Flow with PAR (section 6.1) or a new Credential Offer (section 6.2). The `pre-authorized_code` is invalid, expired, already used, or invalidated by too many failed Transaction Code attempts
+* `invalid_tx_code`: the Transaction Code value is wrong and attempts remain. Retryable, unlike `invalid_grant` - see section 7.4 and NOTE **CS01_09**
 * `invalid_request`: a Transaction Code was provided but not expected, or expected but not provided
 * `invalid_client`: the Token Request lacks the client authentication required by this profile
 
