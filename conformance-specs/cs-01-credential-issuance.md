@@ -1,10 +1,11 @@
 # WE BUILD - Conformance Specification:  Credential Issuance
 
-Version 1.3
-Date: 28 August 2026
+Version 1.4
+Date: 13 October 2026
 
 **Revision history**
 
+* Version 1.4 (13 October 2026): Solved issue[#249](https://github.com/webuild-consortium/wp4-architecture/issues/249) and introduced "eu-eaa-offer://" as the custom URL scheme to invoke the EUDI Wallet.
 * Version 1.3 (28 August 2026): Clarified that re-issuance and the Deferred Credential Endpoint are OPTIONAL for Issuers, resolving issue [#297](https://github.com/webuild-consortium/wp4-architecture/issues/297).
 * Version 1.2 (15 July 2026): Added the re-issuance chapter, resolving issue [#244](https://github.com/webuild-consortium/wp4-architecture/issues/244).
 * Version 1.1 (10 July 2026): Added the pre-authorised code-flow to support payments
@@ -19,6 +20,7 @@ Date: 28 August 2026
 * Malin Norlander, Bolagsverket, Sweden
 * Tomasz Blachowicz, Mastercard, Poland
 * George Fourtounis, GRNET, Greece
+* Peter Kooi, Belastingdienst, Netherlands
 
 ## Table Of Contents
 
@@ -77,7 +79,7 @@ This document defines the **WE BUILD Consortium Conformance Specification (CS)**
 
 It profiles:
 
-* OpenID for Verifiable Credential Issuance (OpenID4VCI) v1.0 [1]
+* OpenID for Verifiable Credential Issuance (OpenID4VCI) v1.1 - Editor's draft [11]
 * The OpenID4VC High Assurance Interoperability Profile (HAIP) 1.0 - Implementers Draft 1 [2]
 
 The aim is to ensure that Wallet Units and Credential Issuers within the WE BUILD ecosystem interoperate consistently for the **issuance of SD-JWT-VC credentials** [3] with high security and privacy.
@@ -97,6 +99,7 @@ This specification defines:
     * Wallet-initiated issuance
     * Re-issuance of previously issued attestations
     * Issuer-initiated issuance via Credential Offer, using the Authorisation Code grant or the Pre-Authorised Code grant
+    * The area of ​​application is browser-mediated and machine-to-machine (M2M) flows.
 
 This document describes:
 
@@ -121,7 +124,7 @@ This specification uses the following roles:
 
 The WE BUILD issuance profile is based on the OAuth 2.0 Authorisation Code Flow and the OpenID4VCI Pre-Authorised Code Flow (grant type `urn:ietf:params:oauth:grant-type:pre-authorized_code`) with the following mandatory features:
 
-* Authorisation Code Flow for Wallet-initiated and Issuer-initiated issuance, and Pre-Authorised Code Flow for Issuer-initiated issuance (See NOTES **CS01_02**, **CS01_03**, **CS01_04** and **CS01_05**)
+* Authorisation Code Flow for Wallet-initiated and Issuer-initiated issuance, and Pre-Authorised Code Flow for Issuer-initiated issuance (See NOTES **CS01_02**, **CS01_03**, **CS01_04**,**CS01_05** and **CS01_06**)
 * OpenID4VCI SD-JWT-VC credential format profile (See NOTE **CS01_01**)
 * Sender-constrained tokens, for example, using Demonstration of Proof of Possession (DPoP) or mutual TLS
 * PKCE with `S256` code challenge method for all authorisation requests (Authorisation Code Flow)
@@ -131,7 +134,7 @@ The WE BUILD issuance profile is based on the OAuth 2.0 Authorisation Code Flow 
 Issuance can be:
 
 * **Wallet-initiated**: the Holder starts from the WU and selects a credential type
-* **Issuer-initiated**: the Issuer provides a **Credential Offer** that the WU consumes, using either the Authorisation Code grant or the Pre-Authorised Code grant
+* **Issuer-initiated**: the Issuer provides a **Credential Offer** that the WU consumes, using either the Authorisation Code grant or the Pre-Authorised Code grant.
 
 Both modes are required in this profile.
 
@@ -149,6 +152,10 @@ Both modes are required in this profile.
 
 > [!NOTE]
 > **CS01_05**: OpenID4VCI [1] section 13.6.2 describes a Transaction Code phishing attack, in which an attacker operating a Credential Issuer site induces the Holder to enter into the Wallet a Transaction Code issued by an unrelated service, such as a payment service, and thereby obtains access to that service. OpenID4VCI RECOMMENDS that Wallets interact with trusted Credential Issuers only, and states that the Wallet MAY show the End-User the Credential Issuer endpoint before the Transaction Code is sent. Because this profile requires a Transaction Code for the Pre-Authorised Code grant (NOTE **CS01_03**), both mitigations are profiled as normative requirements in section 7.2.
+
+
+> [!NOTE]
+> **CS01_06**: Issuance can take place to the EUDI Wallet and to the EB Wallet (EBW). The EUDI Wallet resides on the holder's mobile device. The EBW is a server-based application. The EUDI Wallet is invoked using the custom scheme "eu-eaa-offer://" ([10] section 4.1 requirement GEN-REQ-4.1-06). Since the EBW is a server-based application, it is invoked using the standard "https://" scheme.
 
 # 6. High-level Flows
 
@@ -791,3 +798,7 @@ Profiles may define additional constraints for specific WE BUILD credential type
 [8] IETF (2023) RFC 9449: OAuth 2.0 Demonstrating Proof of Possession (DPoP). Available at: [https://www.rfc-editor.org/rfc/rfc9449](https://www.rfc-editor.org/rfc/rfc9449) (Accessed: 5 June 2026).
 
 [9] European Digital Identity Cooperation Group (2025) The European Digital Identity Wallet Architecture and Reference Framework, Discussion Paper for Topic B: Re-issuance and batch issuance of PIDs and Attestations, version 0.9, 17 February. Available at: [https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework/blob/v2.9.0/docs/discussion-topics/b-re-issuance-and-batch-issuance-of-pids-and-attestations.md](https://github.com/eu-digital-identity-wallet/eudi-doc-architecture-and-reference-framework/blob/v2.9.0/docs/discussion-topics/b-re-issuance-and-batch-issuance-of-pids-and-attestations.md) (Accessed: 10 July 2026).
+
+[10] ETSI (2026) ETSI TS 119 472-3 V1.1.1: Electronic Signatures and Trust Infrastructures (ESI); Profiles for Electronic Attestation of Attributes; Part 3: Profiles for issuance of EAA or PID. Available at: [https://www.etsi.org/deliver/etsi_ts/119400_119499/11947203/01.01.01_60/ts_11947203v010101p.pdf](https://www.etsi.org/deliver/etsi_ts/119400_119499/11947203/01.01.01_60/ts_11947203v010101p.pdf) (Accessed: 13 October 2026).
+
+[11] OpenID Foundation (2026) OpenID for Verifiable Credential Issuance 1.1 - Editor's draft. OpenID Foundation. Available at: [(https://openid.github.io/OpenID4VCI/openid-4-verifiable-credential-issuance-1_1-wg-draft.html)](https://openid.github.io/OpenID4VCI/openid-4-verifiable-credential-issuance-1_1-wg-draft.html) (Accessed: 13 October 2026).
