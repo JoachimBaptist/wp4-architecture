@@ -34,8 +34,8 @@ Date: 13 October 2026
   - [6.1 Wallet-initiated Issuance Flow](#61-wallet-initiated-issuance-flow)
     - [6.1.1 Configuration and discovery](#611-configuration-and-discovery)
     - [6.1.2 User selects credential](#612-user-selects-credential)
-    - [6.1.3 Pushed Authorisation Request (PAR)](#613-pushed-authorisation-request-par)
-    - [6.1.4 User authorisation](#614-user-authorisation)
+    - [6.1.3 Browser-mediated flow](#613-browser-mediated-flow)
+    - [6.1.4 Interactive Authorization flow](#614-interactive-authorization-flow)
     - [6.1.5 Token request](#615-token-request)
     - [6.1.6 Credential request](#616-credential-request)
     - [6.1.7 Storage](#617-storage)
@@ -65,10 +65,11 @@ Date: 13 October 2026
   - [8.1 WU Invocation Interface](#81-wu-invocation-interface)
   - [8.2 Credential Offer Interface](#82-credential-offer-interface)
   - [8.3 PAR Endpoint](#83-par-endpoint)
-  - [8.4 Token Endpoint](#84-token-endpoint)
-  - [8.5 Credential Endpoint](#85-credential-endpoint)
-  - [8.6 Deferred Credential Endpoint](#86-deferred-credential-endpoint)
-  - [8.7 Metadata Endpoints](#87-metadata-endpoints)
+  - [8.4 Authorization Challenge Endpoint (ACE)](#84-authorization-challenge-endpoint-ace)
+  - [8.5 Token Endpoint](#85-token-endpoint)
+  - [8.6 Credential Endpoint](#86-credential-endpoint)
+  - [8.7 Deferred Credential Endpoint](#87-deferred-credential-endpoint)
+  - [8.8 Metadata Endpoints](#88-metadata-endpoints)
 - [9. Conformance](#9-conformance)
 - [References](#references)
 
@@ -402,7 +403,7 @@ When the Credential Issuer cannot immediately produce one or more credentials:
 
 Re-issuance is the replacement of an attestation that already exists in a Wallet Unit by an attestation of the same attestation type, issued by the same Attestation Provider to the same Wallet Unit. Re-issuance keeps a valid technical attestation available throughout the administrative validity of the underlying attestation, is always initiated by the WU, and, to the maximum extent possible, requires no User authentication or interaction (ARF 2.9 [6], Annex 2, Topic 10, ISSU_42; Discussion Paper for Topic B [9]).
 
-Support for re-issuance is OPTIONAL for Issuers. The Issuer requirements in this section and in sections 7.8 and 8.4 apply where the Issuer supports re-issuance (section 9).
+Support for re-issuance is OPTIONAL for Issuers. The Issuer requirements in this section and in sections 7.8 and 8.5 apply where the Issuer supports re-issuance (section 9).
 
 **Actors**: Holder, WU, Issuer (AS and Credential Issuer).
 
@@ -700,7 +701,8 @@ The exact JSON structure MUST comply with OpenID4VCI Credential Offer definition
 * `code_challenge_method=S256`
 * `redirect_uri`
 * `response_type=code`
-* `state`, `nonce`
+* `state`,
+* `nonce`
 * `issuer_state`, when provided in the `authorization_code` grant object of a Credential Offer (section 8.2)
 
 **Response**
@@ -710,8 +712,47 @@ The exact JSON structure MUST comply with OpenID4VCI Credential Offer definition
 
 All PAR requests MUST be client-authenticated according to Section 7.4.
 
+## 8.4 Authorization Challenge Endpoint (ACE)
 
-## 8.4 Token Endpoint
+* **Direction**: Wallet to Issuer (AS)
+* **Method**: `POST`
+
+**Request (logical fields - Initial Authorization Challenge Request)**
+
+* `client_id`
+* `scope` identifying the credential type
+* `code_challenge` using PKCE `S256`
+* `redirect_uri`
+* `response_type=code`
+* `state`
+* `nonce`
+* `issuer_state`, when provided in the `authorization_code` grant object of a Credential Offer (section 8.2)
+* `interaction_types_supported`<br/>comma-separated list of strings indicating the types of interactions that the Wallet supports.
+    	* MUST contain the following values for a native experience (EUDI wallet)<br/>"urn:openid:dcp:ia:openid4vp_presentation", "urn:openid:dcp:ia:auth_via_web"
+     	* MUST contain the following value for M2M (EB wallet)<br/>"urn:openid:dcp:ia:openid4vp_presentation"
+
+**Request (logical fields - Intermediate Authorization Challenge Request)**
+* `auth_session`
+* `openid4vp_response` the answer on a previous response (error, `interaction_type_required`: "urn:openid:dcp:ia:openid4vp_presentation")
+
+**Response**
+* `code`
+
+**Response - Require Presentation**
+* `error` : "insufficient_authorization"
+* `interaction_type_required`: "urn:openid:dcp:ia:openid4vp_presentation"
+* `auth_session`: session_id voor binding subsequent requests to this session
+* `openid4vp_request`
+
+**Response - Authorization via Web**
+* `error` : "insufficient_authorization"
+* `interaction_type_required`: "urn:openid:dcp:ia:auth_via_web"
+* `request_uri`: "urn:ietf:params:oauth:request_uri:<id>"
+* `expires_in`
+
+All ACE requests MUST be client-authenticated according to Section 7.4.
+
+## 8.5 Token Endpoint
 
 * **Direction**: WU to Issuer (AS)
 * **Method**: `POST`
@@ -764,7 +805,7 @@ In line with the OpenID4VCI [1] Token Error Response, the AS returns:
 * `invalid_request`: a Transaction Code was provided but not expected, or expected but not provided
 * `invalid_client`: the Token Request lacks the client authentication required by this profile
 
-## 8.5 Credential Endpoint
+## 8.6 Credential Endpoint
 
 * **Direction**: WU to Issuer
 * **Method**: `POST`
@@ -781,7 +822,7 @@ In line with the OpenID4VCI [1] Token Error Response, the AS returns:
 **Response**
 * SD-JWT-VC credential and any associated metadata defined by the OpenID4VCI SD-JWT-VC profile
 
-## 8.6 Deferred Credential Endpoint
+## 8.7 Deferred Credential Endpoint
 
 This endpoint is OPTIONAL for Issuers (section 7.6). Issuers that support deferred issuance provide it as follows.
 
@@ -818,7 +859,7 @@ If the Deferred Credential Request is invalid, the Issuer returns an error respo
 * <code>invalid_transaction_id:</code> Indicates that the `transaction_id` was not issued by the Credential Issuer or has already been used.
 * If the Credential Issuer can no longer issue the credential(s), it returns `credential_request_denied`. The WU stops retrying for the given `transaction_id`.
 
-## 8.7 Metadata Endpoints
+## 8.8 Metadata Endpoints
 
 Issuers **MUST** publish:
 
