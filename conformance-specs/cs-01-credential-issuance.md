@@ -275,7 +275,7 @@ The WU selected this method based on the presence of the parameter `authorizatio
  		* The response is an error code.
    			* `error` : "insufficient_authorization"
       		* `interaction_type_required`: "urn:openid:dcp:ia:auth_via_web"
-        	* `request_uri`: "urn:ietf:params:oauth:request_uri:<id>"
+        	* `request_uri`: "urn:ietf:params:oauth:request_uri:218swRPh4QX8ZfXKb413i936OxB"
          	* `expires_in`<br/><br/>If the (initial) request contains `code_challenge`, the request can be stored, just like the PAR endpoint (6.1.3.1.), and the request URI under which this authorization request is stored can be returned immediately (`request_uri`). Processing can then continue directly at 6.1.3.2 User authorization, else 6.1.3 Browser-mediated flow must be processed as a whole.<br/>
  
 #### 6.1.4.2 Intermediate Authorization Challenge Request
