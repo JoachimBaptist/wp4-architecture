@@ -48,14 +48,14 @@ Date: 13 October 2026
     - [6.2.2 Credential Offer creation](#622-credential-offer-creation)
     - [6.2.3 Credential Offer delivery and Wallet invocation](#623-credential-offer-delivery-and-wallet-invocation)
     - [6.2.4 WU processes the offer](#624-wu-processes-the-offer)
-    - [6.2.5 Authorisation and token exchange (Authorisation Code grant)](#625-authorisation-and-token-exchange-authorisation-code-grant)
-    - [6.2.6 Token request (Pre-Authorised Code grant)](#626-token-request-pre-authorised-code-grant)
+    - [6.2.5 Authorization and token exchange (Authorization Code grant)](#625-authorization-and-token-exchange-authorization-code-grant)
+    - [6.2.6 Token request (Pre-Authorized Code grant)](#626-token-request-pre-authorized-code-grant)
     - [6.2.7 Credential Request, validation and storage](#627-credential-request-validation-and-storage)
   - [6.3 Deferred Credential Request](#63-deferred-credential-request)
   - [6.4 Re-issuance Flow](#64-re-issuance-flow)
     - [6.4.1 Re-issuance triggers](#641-re-issuance-triggers)
     - [6.4.2 Re-issuance using the Refresh Token grant](#642-re-issuance-using-the-refresh-token-grant)
-    - [6.4.3 Fallback to the full authorisation flow](#643-fallback-to-the-full-authorisation-flow)
+    - [6.4.3 Fallback to the full authorization flow](#643-fallback-to-the-full-authorization-flow)
 - [7. Normative Requirements](#7-normative-requirements)
   - [7.1 Common requirements (WU and Issuer)](#71-common-requirements-wu-and-issuer)
   - [7.2 Credential Offer](#72-credential-offer)
@@ -184,19 +184,16 @@ Furthermore, in the issuer-initiated scenario, the method by which the credentia
 3. semi-interactive/semi-automated (M2M) - user interaction occurs only on the issuer's side. The issuance of the verifiable credential is accepted automatically by the business wallet.
 
 The first point applies to both the EUDI Wallet and EBW. In this case the credential offer must be presented via the front-channel.
-Points 2 and 3 apply exclusively to EBW. In that case, it is preferable to present the credential offer via the back-channel, allowing the process on the EBW side to be fully automated.
+Two and three apply exclusively to EBW. In that case, it is preferable to present the credential offer via the back-channel, allowing the process on the EBW side to be fully automated.<br/>The mirrored variant of three is not taken into account, as it falls under the category 'wallet-initiated'.
 
 > [!NOTE]
 >Issuers must be aware that in case of 'Interactive Authorization' it is not possible for the authorization server to perform browser-based redirects if its internal operations require them.
-
-> [!NOTE]
-> The variant involving user interaction on the business wallet side and automated processing on the issuer side has been deliberately omitted, as this is implicitly covered by the specifications [1].
 
 ## 6.1 Wallet-initiated Issuance Flow
 
 **Actors**: Holder, WU, Issuer (AS and Credential Issuer).
 
-The starting point for wallet-initiated flows is that the WU possesses the Credential Issuer's identifier (`credential_issuer`; in URL format). How the WU did obtain the Credential Issuer's identifier is out of scope of this specification.
+The starting point for wallet-initiated flows is that the WU possesses the Issuer's identifier (`credential_issuer`; in URL format). How the WU did obtain the Issuer's identifier is out of scope of this specification.
 
 Sections 6.1.1, 6.1.2 and 6.1.5 to 6.1.7 are common to both the Browser-mediated flow and the Interactive Authorization flow. The flows diverge only at the authorization step, 6.1.3 for the Browser-mediated flow and 6.1.4 for the Interactive Authorization flow, and converge again at 6.1.5.
 
@@ -209,7 +206,7 @@ Sections 6.1.1, 6.1.2 and 6.1.5 to 6.1.7 are common to both the Browser-mediated
       
 2. The WU retrieves Issuer's Authorization Server metadata, which includes:
     *  `authorization_endpoint`: REQUIRED.<br/>The URL where the WU redirects the user to log in and grant authorization (default behavior. Pattern 'browser-mediatied interactive flow').
-    *  `require_interactive_authorization`: OPTIONAL.<br/>A boolean indicating whether the Authorization Server only accepts Interactive Authorization for Credential issuance. If omitted, the default value is false.<br/>This parameter MUST NOT be present if `authorization_challenge_endpoint` is omitted.<br/>Note that the presence of authorization_challenge_endpoint is sufficient for a WU to determine that it can use Interactive Authorization.
+    *  `require_interactive_authorization`: OPTIONAL.<br/>A boolean indicating whether the authorization server only accepts Interactive Authorization for credential issuance. If omitted, the default value is false.<br/>This parameter MUST NOT be present if `authorization_challenge_endpoint` is omitted.<br/>Note that the presence of authorization_challenge_endpoint is sufficient for a WU to determine that it can use Interactive Authorization.
     * `authorization_challenge_endpoint`: OPTIONAL.<br/>The authorization challenge endpoint is an HTTP API at the authorization server that accepts HTTP POST requests with parameters in the HTTP request message body using the application/x-www-form-urlencoded format.
     * `scopes_supported`: A list of the access scopes that the server supports.
 
@@ -235,13 +232,13 @@ This is a redirection-based flow. The WU must be capable of interacting with the
     * `response_type=code`
     * `state`
     * `nonce`
-1. The WU sends this request to the Authorization server's PAR endpoint, with client authentication bound to the (B)WUA depending on the type of wallet used (EUDI wallet: WUA; EBW: BWUA).
+1. The WU sends this request to Issuer's authorization server's PAR endpoint, with client authentication bound to the (B)WUA depending on the type of wallet used (EUDI wallet: WUA; EBW: BWUA).
 2. The PAR endpoint returns a `request_uri` and a validity period.
 
 #### 6.1.3.2 User authorization
 
-1. The WU directs, actually redirects, the Holder’s user-agent to the Authorisation Endpoint with the `request_uri` obtained from PAR.
-2. The Holder authenticates to the AS in accordance with the Issuer’s policy.<br/>For instance retrieving data from the wallet using OpenID4VP [11].
+1. The WU directs (redirect) the Holder’s user-agent to the authorization endpoint with the `request_uri` obtained from PAR.
+2. The Holder authenticates to the AS in accordance with Issuer’s policy.<br/>For instance retrieving data from the wallet using OpenID4VP [11].
 3. The Holder consents to the issuance of the requested credential.
 4. The AS redirects back to the WU with an authorization `code` and `state`.
 
@@ -249,7 +246,7 @@ This is a redirection-based flow. The WU must be capable of interacting with the
 _Either 6.1.3 or 6.1.4 applies, not both._
 
 Interaction occurs directly between the WU and Issuer's authorization server rather than being intermediated by a browser.
-The WU selected this method based on the presence of the parameter `authorization_challenge_endpoint` in Issuer's authorization server metadata. By doing so, the WU indicates a preference for back-channel communication.<br/>It is up to the Issuer's authorization server to decide whether to accommodate this or to enforce front-channel communication instead. After all, according to Issuer's authorization server, there may be reasons why 'front-channel' communication is more suitable for the specific case (e.g., additional user input is required or cards are needed from both the EUDI wallet and EBW).
+The WU selected this method based on the presence of the parameter `authorization_challenge_endpoint` in Issuer's authorization server metadata. By doing so, the WU indicates a preference for back-channel communication.<br/>It is up to the Issuer's authorization server to decide whether to accommodate this or to enforce front-channel communication instead. After all, according to Issuer's authorization server, there may be reasons why 'front-channel' communication is more suitable for the specific case (e.g. additional user input is required or various cards are needed from both the EUDI wallet and EBW).
  
 #### 6.1.4.1 Initial Authorization Challenge Request
 
@@ -279,15 +276,15 @@ The WU selected this method based on the presence of the parameter `authorizatio
    			* `error` : "insufficient_authorization"
       		* `interaction_type_required`: "urn:openid:dcp:ia:auth_via_web"
         	* `request_uri`: "urn:ietf:params:oauth:request_uri:<id>"
-         	* `expires_in`<br/><br/>If the (initial) request contains `code_challenge`, the request can be stored, just like the PAR endpoint, and the request URI under which this authorization request is stored can be returned immediately (`request_uri`). Processing can then continue directly at 6.1.3.2 User authorization, else 6.1.3 Browser-mediated flow must be processed as a whole.<br/>
+         	* `expires_in`<br/><br/>If the (initial) request contains `code_challenge`, the request can be stored, just like the PAR endpoint (6.1.3.1.), and the request URI under which this authorization request is stored can be returned immediately (`request_uri`). Processing can then continue directly at 6.1.3.2 User authorization, else 6.1.3 Browser-mediated flow must be processed as a whole.<br/>
  
 #### 6.1.4.2 Intermediate Authorization Challenge Request
 
 1. The WU constructs an authorization request containing, at a minimum:
 	* `auth_session`
- 	* `openid4vp_response` the answer on a previous response (error, `interaction_type_required`: "urn:openid:dcp:ia:openid4vp_presentation")
+ 	* `openid4vp_response`<br/>this is the answer on a previous response (error, `interaction_type_required`: "urn:openid:dcp:ia:openid4vp_presentation")
 2. The WU sends this request to the Authorization server's authorization challenge endpoint (ACE), with client authentication bound to the (B)WUA, depending on the type of wallet used (EUDI wallet: WUA; EBW: BWUA).
-3. The authorization challenge endpoint response is either an authorization code or an error code. See above.
+3. The authorization challenge endpoint response is either an authorization code or an error code. See above (6.1.4.1).
 
 ### 6.1.5 Token request
 
@@ -334,12 +331,9 @@ Where the Pre-Authorised Code grant is used, the Issuer authenticates the Holder
 2. As part of this process, the Issuer authenticates the Holder and obtains the consent and data required for issuance. How this is done is out of scope of this specification.
 3. Following successful internal checks, the Issuer decides to issue one or more credentials.
 
-Part of this process involves determining the type of wallet involved and, in the case of a business wallet, obtaining the address of the business wallet. The method for determining the business wallet's address is left to the issuer; however, the following options could be considered:
-* User input - the user enters this address;
-* Card on the personal wallet;
-* User input in conjunction with the use of the European Digital Directory (EDD) [12].
+Part of this process involves determining the type of wallet involved and, in the case of a business wallet, obtaining the EBWOID identifier (or Legal Name) of the intended business wallet owner. The method for determining this is left to the issuer.
 
-When using EDD, the address of the business wallet’s credential-offer endpoint can be retrieved directly via a lookup service. In other cases, the process for obtaining the business wallet’s credential-offer endpoint will still need to be performed. The method by which the Issuer obtains the address of the business wallet, usually indicated by the client ID, is out of scope for this document.
+The EBWOID identification code (or legal name) will be used to retrieve the business wallet’s credential-offer endpoint from the European Digital Directory (EDD) [12].
 
 > [!NOTE]
 >In a fully automated scenario, this step is either skipped or handled in another manner preferred by the issuer.
@@ -357,72 +351,76 @@ When using EDD, the address of the business wallet’s credential-offer endpoint
 
 #### 6.2.3 Credential Offer delivery and Wallet invocation
 
-Three possible scenario's:
-1. The target wallet is an EUDI-wallet
-   The Issuer delivers the offer to the Holder by one of:
-   * displaying a QR code that encodes a URL which uses the ~`openid-credential-offer://`~ `eu-eaa-offer://` scheme to invoke the WU
-   * sending a link that uses the ~`openid-credential-offer://`~ `eu-eaa-offer://` scheme to a device with a registered WU (front-channel; redirect).
+**The target wallet is an EUDI-wallet**
+The Issuer delivers the offer to the Holder by one of:
+* displaying a QR code that encodes a URL which uses the `eu-eaa-offer://` or `openid-credential-offer://` (deprecated) scheme to invoke the WU
+* sending a link that uses the `eu-eaa-offer://` or `openid-credential-offer://` (deprecated) scheme to a device with a registered WU (front-channel; redirect).
 		 
-   Both same-device and cross-device delivery methods MUST be supported.
+Both same-device and cross-device delivery methods MUST be supported.
 
-2. The target wallet is a business wallet and the operation mode == 'fully interactive'
-    1. If the credential offer endpoint has not already been obtained through other means, the issuer retrieves the Client Metadata using the client ID. The Client Metadata includes:
-       * `credential_offer_endpoint`
+**The target wallet is a business wallet**
 
-       If the Client Metadata cannot be retrieved, the following default value will be used: "/openid4vci/credential_offer".
-	   This default value will be appended to the address of the business wallet.
+1. The WU retrieves the credential-offer endpoint by using the lookup service at EDD ([12] section 6.5.3)
+   1. The WU obtains an access token from EDD's Authorization Server. The WU MUST authenticate itself by using client credentials [13].
+      * `scope`="cs05.discovery.lookup"
+      * `grant_type`="client_credentials"
+      * `client_assertion_type`="urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+      * `client_assertion`="eyJ..."
+   2. The WU retrieves the credential-offer endpoint by using the lookup service
+      * `ebwoid_id`
+
+**1st attempt** The starting point is automated processing.
+
+2. The WU sends the Credential Offer to the business wallet's `credential_offer_endpoint` over the back-channel (POST).
+
+If the WU determines that automated processing is not applicable to the case at hand, it MAY respond with an error (HTTP status code 405). In such a scenario, the Issuer MAY proceed to **2nd attempt**, provided that the mode allows for this. (see 6.2.4)
 	   
-    2. Send a link to the business wallet's `credential_offer_endpoint` (front-channel; redirect).
+**2nd attempt** User input expected; front-channel required.
 
-3. The target wallet is a business wallet and the operation mode <> 'fully interactive'
-    1. If the credential offer endpoint has not already been obtained through other means, the issuer retrieves the Client Metadata using the client ID. The Client Metadata includes:
-       * `credential_offer_endpoint`
-
-       If the Client Metadata cannot be retrieved, the following default value will be used: "/openid4vci/credential_offer".
-	   This default value will be appended to the address of the business wallet.
-	   
-    2. Send a link to the business wallet's `credential_offer_endpoint` (back-channel; POST).
+3. The WU sends the Credential Offer to the business wallet's `credential_offer_endpoint` over the front-channel (redirect).
+>[!NOTE]
+>In "fully automated" mode, **2nd attempt** does not apply. However, the Issuer may choose to proceed directly to **2nd attempt**. For example, in "fully interactive" mode.
 
 ### 6.2.4 WU processes the offer
 
 1. The WU is triggered either via the front-channel (redirect) or via the back-channel (POST).<br/>Based on the type of request, the WU must determine which of the two applies.
 
-   If the WU is triggered via the front-channel, it is free to choose how it wishes to communicate with the Issuer (mode <> "fully automated").
-   If the WU is triggered via the back-channel, the Issuer expects it to be processed automatically. However, the WU - i.e. the business wallet - is totally free to implement its own processes. After all, there is no obligation to meet the issuer's expectations.
+   If the WU is triggered via the front-channel, it is free to choose how it wishes to communicate with the Issuer (mode <> "fully automated").<br/>
+   If the WU is triggered via the back-channel, the Issuer expects it to be processed automatically. However, the WU - i.e. the business wallet - is totally free to implement its own processes. After all, there is no obligation to meet the issuer's expectations.<br/>
+   If the WU does not in any way fulfill the requirements implied by the manner in which it was invoked, then the WU MUST respond with an error (HTTP status code 405). (see 6.2.3)
 
    The EUDI Wallet is allways triggered via the front-channel.
 
-3. The WU verifies that the `credential_issuer` value identifies a trusted Credential Issuer, and terminates processing otherwise (section 7.2, NOTE **CS01_05**).
+2. The WU verifies that the `credential_issuer` value identifies a trusted Credential Issuer, and terminates processing otherwise (section 7.2, NOTE **CS01_05**).
 
-4. The WU parses the offer and determines:
+3. The WU parses the offer and determines:
    * Issuer base URL
    * the offered `credential_configuration_ids`
    * which grant type(s) the offer carries, and for the Pre-Authorised Code grant the `pre-authorized_code` and the `tx_code` requirements (`input_mode`, `length`, `description`)
 
-5. The WU retrieves Issuer metadata and resolves each `credential_configuration_ids` value against `credential_configurations_supported`, obtaining the credential type and, for the Authorisation Code grant, the `scope` value to use in the authorisation request (section 7.7).
+4. The WU retrieves Issuer metadata and resolves each `credential_configuration_ids` value against `credential_configurations_supported`, obtaining the credential type and, for the Authorisation Code grant, the `scope` value to use in the authorisation request (section 7.7).
 
-6. The WU displays the offer to the Holder and asks for confirmation to proceed. (only in 'fully interactive' mode)
+5. The WU displays the offer to the Holder and asks for confirmation to proceed. (only in 'fully interactive' mode)
 > [!NOTE]
 >[1] does not currently describe a standardized way to access the Credential Offer Endpoint via the back-channel. Although the specification allows for this, it has been left out of scope for the current version.<br/>For WeBuild, we are, for the time being, employing the approach described above.
 
+### 6.2.5 Authorization and token exchange (Authorization Code grant)
 
-### 6.2.5 Authorisation and token exchange (Authorisation Code grant)
+1. The WU initiates the Authorization Code Flow ~using PAR~ as defined in Section 6.1, using the `scope` values resolved in 6.2.4 and including `issuer_state` unchanged where the offer provided one.
 
-1. The WU initiates the Authorisation Code Flow ~using PAR~ as defined in Section 6.1, using the `scope` values resolved in 6.2.4 and including `issuer_state` unchanged where the offer provided one.
+2. The remainder of the flow, including authorization, token request, credential request and storage, is identical to the Wallet-initiated flow.
 
-2. The remainder of the flow, including authorisation, token request, credential request and storage, is identical to the Wallet-initiated flow.
-
-### 6.2.6 Token request (Pre-Authorised Code grant)
+### 6.2.6 Token request (Pre-Authorized Code grant)
 
 1. The WU prompts the Holder to enter the Transaction Code received from the Issuer, rendering the input screen according to the `tx_code` object and displaying its `description` where present. Before submitting, the WU displays the Credential Issuer endpoint to which the Transaction Code will be sent (section 7.2, NOTE **CS01_05**).
 
-2. The WU sends a token request directly to the Token Endpoint, without any prior Authorisation Endpoint or PAR interaction, including:
+2. The WU sends a token request directly to the Token Endpoint, without any prior Authorization Endpoint or PAR interaction, including:
    * `grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code`
    * `pre-authorized_code` from the Credential Offer
    * `tx_code` entered by the Holder
    * client authentication using (B)WUA (EUDI wallet: WUA; EBW: BWUA).
 
-3. The Token Endpoint validates the Pre-Authorised Code and the Transaction Code, and returns:
+3. The Token Endpoint validates the Pre-Authorized Code and the Transaction Code, and returns:
    * sender-constrained `access_token`
    * optional `refresh_token` for credential refresh
 
@@ -490,9 +488,9 @@ The primary re-issuance mechanism is the OpenID4VCI Refresh Token grant at the T
 
 Because no authorisation code is involved, no front-channel User interaction takes place in this flow.
 
-### 6.4.3 Fallback to the full authorisation flow
+### 6.4.3 Fallback to the full authorization flow
 
-Where no valid refresh token exists, or the Authorisation Server requires re-authentication (for example, after attribute value changes), the WU falls back to the full Authorisation Code Flow ~with PAR~ (section 6.1) or processes a new Credential Offer (section 6.2). The remainder of the flow, including authorisation, token request, credential request and storage, is identical to those flows.
+Where no valid refresh token exists, or the Authorization Server requires re-authentication (for example, after attribute value changes), the WU falls back to the full Authorization Code Flow ~with PAR~ (section 6.1) or processes a new Credential Offer (section 6.2). The remainder of the flow, including authorization, token request, credential request and storage, is identical to those flows.
 
 > [!NOTE]
 > CS01_02: Batch issuance and batch re-issuance per ARF 2.9 [6] and the Discussion Paper for Topic B [9] will be specified in a subsequent version of this document.
@@ -505,7 +503,7 @@ This section summarises the mandatory requirements for WE BUILD implementations.
 
 Both WU and Issuer **MUST**:
 
-1. Support the Authorisation Code Flow for Wallet-initiated and Issuer-initiated credential issuance. Grant types other than `authorization_code` and `urn:ietf:params:oauth:grant-type:pre-authorized_code` MUST NOT be used for credential issuance.
+1. Support the Authorization Code Flow for Wallet-initiated and Issuer-initiated credential issuance. Grant types other than `authorization_code` and `urn:ietf:params:oauth:grant-type:pre-authorized_code` MUST NOT be used for credential issuance.
 2. Support the SD-JWT-VC credential format profile as defined for OpenID4VCI.
 3. Support sender-constrained tokens, for example, using DPoP or mutual TLS.
 4. Support PKCE with the `S256` code challenge method for all authorisation requests.
@@ -513,11 +511,16 @@ Both WU and Issuer **MUST**:
 
 WUs **MUST** additionally:
 
-1. Support the Pre-Authorised Code Flow (grant type `urn:ietf:params:oauth:grant-type:pre-authorized_code`) for Issuer-initiated issuance, since a Wallet Unit does not control which grant type an Issuer offers.
+1. Support the Pre-Authorized Code Flow (grant type `urn:ietf:params:oauth:grant-type:pre-authorized_code`) for Issuer-initiated issuance, since a Wallet Unit does not control which grant type an Issuer offers.
+2. Ensure that the business wallet’s credential-offer endpoint is discoverable via the EDD lookup service in some form. (Either through direct registration in EDD or by providing Client Metadata.)
+
+Both WU and Issuer **SHOULD**:
+
+1. Support the Interactive Authorization mechanisme.<br/>Through this mechanism, the EUDI wallet can provide a native user experience, and the EB wallet can automatically request a verifiable credential.
 
 Issuers **MAY**:
 
-1. Support the Pre-Authorised Code Flow for Issuer-initiated issuance where the use case calls for it (NOTE **CS01_02**). Issuers that do so MUST meet the additional requirements in sections 7.2, 7.4 and 7.7.
+1. Support the Pre-Authorized Code Flow for Issuer-initiated issuance where the use case calls for it (NOTE **CS01_02**). Issuers that do so MUST meet the additional requirements in sections 7.2, 7.4 and 7.7.
 
 ## 7.2 Credential Offer
 
@@ -535,6 +538,10 @@ Issuers that support the Pre-Authorised Code Flow (section 7.1) **MUST** additio
 3. Include a `tx_code` object in every Credential Offer that uses the `urn:ietf:params:oauth:grant-type:pre-authorized_code` grant type, as the replay mitigation required by OpenID4VCI [1] section 13.6.1 (NOTES **CS01_03** and **CS01_04**).
 4. Deliver the Transaction Code to the Holder via a channel separate from the Credential Offer, for example, by text message or email (OpenID4VCI [1], section 4.1.1).
 
+Issuers **SHOULD**:
+
+1. Also support the custom URL scheme `eu-eaa-offer://` for invoking the Wallet, as this is the method prescribed by ETSI.
+
 WUs **MUST**:
 
 1. Be able to parse a Credential Offer that uses `authorization_code` as the grant type.
@@ -548,6 +555,7 @@ WUs **MUST**:
 WUs **SHOULD**:
 
 1. Display the Credential Issuer endpoint to which a Transaction Code will be sent, and ask the Holder for confirmation, before submitting the Token Request (OpenID4VCI [1], section 13.6.2, NOTE **CS01_05**).
+2. Also support invocation via the custom URL scheme `eu-eaa-offer://`, as this is the method prescribed by ETSI.
 
 ## 7.3 Authorisation Endpoint and PAR
 
@@ -555,24 +563,24 @@ The requirements in this section apply to the Authorisation Code Flow only. The 
 
 Issuers **MUST**:
 
-1. Require Pushed Authorisation Requests (PAR) for all authorisation requests. Direct front-channel authorisation requests without PAR MUST NOT be used.
+1. Require Pushed Authorization Requests (PAR) for all authorisation requests. Direct front-channel authorization requests without PAR MUST NOT be used.
 2. Ensure that the Wallet authenticates at the PAR endpoint using the same method as used for client authentication at the Token Endpoint.
 3. Verify the WIA presented at the PAR endpoint as at the Token Endpoint, including that its `x5c` signing certificate chains to a trust anchor on the Trusted List for Wallet Providers (see section 7.4; TS-03 [5], clause 2.2.1.1; CS-04 [7]).
 
 WUs **MUST**:
 
-1. Use PAR for all authorisation requests.
+1. Use PAR for all authorization requests.
 2. Use the `scope` parameter to indicate the credential type to be issued. Each `scope` value MUST map to a specific credential type that is known from Issuer metadata or from the Credential Offer.
 3. Ensure that the `client_id` in the PAR request matches the `sub` claim in the WIA (Wallet Instance Attestation) JWT used for client authentication.
-4. Include `dpop_jkt` (the JWK Thumbprint of the WIA `cnf` key) in the PAR request to bind the issued authorisation code to the DPoP key (RFC 9449 [8], Section 10), so that the sender-constraint holds from PAR through to the Access Token. TS-03 [5] mandates the `cnf.jkt` check at the Token Request (section 7.4); binding the code at PAR is the OpenID4VCI / RFC 9449 mechanism and is to be confirmed for this profile.
+4. Include `dpop_jkt` (the JWK Thumbprint of the WIA `cnf` key) in the PAR request to bind the issued authorization code to the DPoP key (RFC 9449 [8], Section 10), so that the sender-constraint holds from PAR through to the Access Token. TS-03 [5] mandates the `cnf.jkt` check at the Token Request (section 7.4); binding the code at PAR is the OpenID4VCI / RFC 9449 mechanism and is to be confirmed for this profile.
 
 ## 7.4 Token Endpoint and Wallet Attestation
 
 WUs **MUST**:
 
-1. Authenticate at the Token Endpoint using the WIA, a Wallet Attestation per OpenID4VCI [1] v1.0 Appendix E (`typ: oauth-client-attestation+jwt`), sent with its Proof-of-Possession (`oauth-client-attestation-pop+jwt`) in the PAR and Token Request. The WIA is profiled in CS-04 [7] (TS-03 [5], clause 2.2.1.1).
+1. Authenticate at the Token Endpoint using the (B)WIA, a Wallet Attestation per OpenID4VCI [1] v1.0 Appendix E (`typ: oauth-client-attestation+jwt`), sent with its Proof-of-Possession (`oauth-client-attestation-pop+jwt`) in the PAR and Token Request. The WIA is profiled in CS-04 [7], the BWIA in CS-05 [12] (TS-03 [5], clause 2.2.1.1).
 2. Convey the Wallet Provider signing certificate in the `x5c` JOSE header of the WIA, with intermediate certificates as needed. The Wallet Provider identity is inferred from this certificate; `iss` is not used (TS-03 [5], clause 2.2.1).
-3. Use the WIA `cnf` key as the DPoP key when requesting the Access Token, and on receipt verify that the Access Token's `cnf.jkt` matches the JWK Thumbprint of that `cnf` key, aborting the issuance session on mismatch. This session binding is the obligation profiled in CS-04 [7], section 7.3 (TS-03 [5], clause 2.2.1.1).
+3. Use the (B)WIA `cnf` key as the DPoP key when requesting the Access Token, and on receipt verify that the Access Token's `cnf.jkt` matches the JWK Thumbprint of that `cnf` key, aborting the issuance session on mismatch. This session binding is the obligation profiled in CS-04 [7], section 7.3 and in CS-05 [12], section 7.3 (TS-03 [5], clause 2.2.1.1).
 4. Ensure the `sub` claim in the WIA equals the `client_id` used in PAR and Token Requests.
 
 Issuers **MUST**:
@@ -698,18 +706,64 @@ This section defines the logical interfaces for conformance. Exact URL paths are
 
 ## 8.1 WU Invocation Interface
 
+**EUDI Wallet**
 * **Direction**: Issuer to Wallet
 * **Transport**: custom URL scheme and optional QR code
 * **Requirement**:
-	* Wallets and Issuers MUST support the `openid-credential-offer://` scheme as a minimal mechanism to invoke Wallets in both same-device and cross-device scenarios
+	* Wallets and Issuers MUST support the `openid-credential-offer://` scheme as a minimal mechanism to invoke Wallets in both same-device and cross-device scenarios.
+    * Wallets and issuers SHOULD preferably also support the `eu-eaa-offer://` scheme as a mechanism for to invoke Wallets in both same-device and cross-device scenarios.<br/>
+ETSI prescribes the use of the custom URL scheme `eu-eaa-offer://`
 
 **Example (illustrative)** 
 
 ```
-openid-credential-offer://credential-offer?request_uri=...
+openid-credential-offer://?credential_offer_uri=...
+```
+
+```
+eu-eaa-offer://?credential_offer_uri=...
 ```
 
 The concrete parameters and encoding follow HAIP and OpenID4VCI guidance on Credential Offers.
+
+
+**EB Wallet**
+* **Direction**: Issuer to Wallet
+* **Method**: `GET`  - Browser-mediated
+              `POST` - M2M 
+
+**Example (illustrative)** 
+
+_Browser-mediated_
+```
+HTTP/1.1 302 Found
+Location: https://example.business_wallet.com/credential_offer?credential_offer_uri=...
+```
+
+_Interactive Authorization / M2M_
+```
+POST /credential_offer HTTP/1.1
+Host: example.business_wallet.com
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 104
+
+credential_offer_uri=...
+```
+
+**Response** If the method is not supported
+
+```
+HTTP/1.1 405 Method Not Allowed
+Content-Type: application/json
+Allow: GET, HEAD
+Content-Length: 98
+
+{
+  "error": "method_not_allowed",
+  "error_description": "Cannot POST to this URI. This endpoint only supports GET requests."
+}
+```
+
 
 ## 8.2 Credential Offer Interface
 
@@ -970,3 +1024,5 @@ Profiles may define additional constraints for specific WE BUILD credential type
 [11] WE BUILD (2026) Conformance Specification CS-02: Credential Presentation. webuild-consortium/wp4-architecture.
 
 [12] WE BUILD (2026) Conformance Specification CS-05: Business Wallet Unit Attestation (BWUA) Lifecycle.
+
+[13] IETF (2015) RFC 7523: JSON Web Token (JWT) Profile for OAuth 2.0 Client Authentication and Authorization Grants. Available at: [https://www.rfc-editor.org/rfc/rfc9449](https://www.rfc-editor.org/info/rfc7523/) (Accessed: 13 October 2026).
