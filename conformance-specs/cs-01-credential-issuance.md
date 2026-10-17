@@ -76,6 +76,10 @@ Date: 13 October 2026
   - [8.8 Metadata Endpoints](#88-metadata-endpoints)
 - [9. Conformance](#9-conformance)
 - [References](#references)
+- [Annex A: Business Wallet Interaction Matrix and Routing Logic](#annex-a-business-wallet-interaction-matrix-and-routing-logic)
+   - [A.1 Interaction Matrix](#a1-interaction-matrix)
+   - [A.2. Dynamic Issuer-Initiated Routing Sequence](#a2-dynamic-issuer-initiated-routing-sequence)
+   - [A.3 Architectural Consideration & Architectural Improvement Suggestion](#a3-architectural-consideration--architectural-improvement-suggestion)
 
 
 # 1. Introduction
@@ -1026,3 +1030,85 @@ Profiles may define additional constraints for specific WE BUILD credential type
 [12] WE BUILD (2026) Conformance Specification CS-05: Business Wallet Unit Attestation (BWUA) Lifecycle.
 
 [13] IETF (2015) RFC 7523: JSON Web Token (JWT) Profile for OAuth 2.0 Client Authentication and Authorization Grants. Available at: [https://www.rfc-editor.org/rfc/rfc9449](https://www.rfc-editor.org/info/rfc7523/) (Accessed: 13 October 2026).
+
+# Annex A: Business Wallet Interaction Matrix and Routing Logic
+
+This annex outlines the integration matrix for Credential Offer delivery covering both Personal Wallets and server-based Business Wallets. Furthermore, it describes a dynamic fallback mechanism implemented by the Issuer to maximize interoperability without requiring prior profiling of the Business Wallet's capabilities.
+
+## A.1 Interaction Matrix
+
+The architecture supports five distinct interaction scenarios based on the source context (where the issuance is triggered) and the target context (how the wallet receives and processes the offer).
+
+| Scenario | Initiation | Source Context | Target Context | Protocol / Transport Mechanism |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | Issuer | Issuer + Browser | Personal Wallet + Browser | **Deep Link / QR Code:** Browser redirect via custom URI scheme (`openid-credential-offer://`) triggering the local mobile wallet application. |
+| **2** | Issuer | Issuer + Browser | Business Wallet + Browser | **Credential Offer Endpoint (HTTP GET):** Browser redirect (`HTTP 302`) to the Business Wallet’s Credential-Offer endpoint (resolved via the EDD) with the offer payload in the query parameters. |
+| **3** | Issuer | Issuer + Browser | Business Wallet M2M | **Direct HTTP POST:** Back-channel server-to-server call from the Issuer to the Business Wallet's Credential-Offer endpoint (resolved via the EDD) for automated asynchronous processing. |
+| **4** | Wallet | Issuer M2M | Business Wallet + Browser | **Wallet-Initiated Flow:** The Business Wallet triggers the issuance by calling the standardized **Authorization Challenge Endpoint** on the Issuer, initiating the flow from within the wallet's browser context. |
+| **5** | Issuer | Issuer M2M | Business Wallet M2M | **Direct HTTP POST:** Pure Machine-to-Machine (M2M) automated delivery via a back-channel server-to-server call using the Business Wallet's Credential-Offer endpoint resolved via the EDD. |
+
+---
+
+## A.2. Dynamic Issuer-Initiated Routing Sequence
+
+In this setup, the Issuer does not query the Business Wallet directly for its metadata. Instead, the Issuer queries the central **European Digital Directory (EDD)** to resolve the specific endpoint for the target Business Wallet.
+
+The following sequence diagram illustrates the speculative execution and dynamic routing logic when executing **Scenarios 2, 3, or 5** using a single EDD-resolved endpoint:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User Browser
+    participant Issuer as Issuer Backend
+    participant EDD as Central EDD
+    participant Wallet as Business Wallet Server
+
+    User->>Issuer: 1. Trigger Issuance Request (Connection 1)
+    Note over Issuer: Check target wallet identifier
+    Issuer->>EDD: 2. Query endpoint for Business Wallet
+    EDD-->>Issuer: 3. Return registered 'credential_offer_endpoint'
+    
+    rect rgb(230, 245, 255)
+        Note over Issuer, Wallet: [Attempt Back-Channel M2M Delivery]
+        Issuer->>Wallet: 4. HTTP POST (Credential Offer JSON) (Connection 2)
+        alt Wallet supports M2M processing
+            Wallet-->>Issuer: 5a. HTTP 200 OK / 202 Accepted
+            Issuer-->>User: 6a. Return success status (Process completed asynchronously)
+        else Wallet requires interactive browser context
+            Wallet-->>Issuer: 5b. HTTP 405 Method Not Allowed / 404 Not Found
+            Note over Issuer: Intercept error & initiate fallback
+            Issuer-->>User: 6b. HTTP 302 Found (Redirect to exact same endpoint)
+            User->>Wallet: 7. HTTP GET (Credential Offer via browser URL query)
+            Note over User, Wallet: [Process continues interactively via User Web Portal]
+        end
+    end
+```
+
+### Step-by-Step Routing Logic:
+
+1. **Directory Lookup:** The Issuer queries the central **EDD** using the Business Wallet’s identifier and retrieves the registered `credential_offer_endpoint`.
+2. **Initial M2M Attempt (POST):** The Issuer backend establishes a direct server-to-server connection (Connection 2) to this resolved endpoint, speculatively sending the payload via an `HTTP POST`.
+3. **Automated Processing (Success):** If the Business Wallet supports M2M processing for that credential type on that endpoint, it accepts the payload (`HTTP 200` or `HTTP 202`). The transaction proceeds entirely in the background (Scenario 3 or 5).
+4. **Interactive Fallback Trigger (HTTP 405/404):** If the Business Wallet does not support M2M processing, its endpoint responds with an `HTTP 405 Method Not Allowed` or `HTTP 404 Not Found`.
+5. **Browser Redirect Execution (GET):** Upon intercepting the 405/404 response on the back-channel, the Issuer backend returns to the user's active browser session (Connection 1) and issues an `HTTP 302 Found` redirect. The browser is seamlessly redirected to the exact same standard **Credential Offer Endpoint** using an `HTTP GET` request, shifting the context to a user-interactive session (Scenario 2).
+
+---
+
+## A.3 Architectural Consideration & Architectural Improvement Suggestion
+
+### The Current Constraint
+Current implementations within the LSP WeBuild ecosystem rely on the **European Digital Directory (EDD)** to store a **single, unified URL** representing the OpenID4VCI `credential_offer_endpoint` for each participant. As defined in the standard OpenID4VCI profiles, this entry is inherently expected to receive interactive user-facing traffic via `HTTP GET` browser redirects. The dynamic routing logic described in this architecture expands upon this by trying a speculative `POST` to the EDD-resolved URL first.
+
+### The Challenge
+In enterprise IT architectures, public-facing web applications (portals) and Machine-to-Machine endpoints (API Gateways) are fundamentally segregated due to differing security policies, firewall configurations, and network zones. Forcing a single URL entry in the **EDD** to route both pure background JSON payloads (`POST`) and interactive browser sessions (`GET`) places a heavy architectural burden on the Business Wallet provider. It requires complex reverse-proxy routing. If an API Gateway receives the subsequent `HTTP GET` redirect, it will likely output a raw JSON error rather than rendering a human-readable portal page.
+
+### Proposed Improvement: Dual-Endpoint Profiling in the EDD
+To resolve this friction while maintaining strict compliance with the OpenID4VCI standard and the WeBuild architecture, it is highly recommended to evolve the data schema of the central **European Digital Directory (EDD)**.
+
+Instead of registering a single, multi-purpose endpoint per Business Wallet, the **EDD** schema should allow participants to publish two distinct capability endpoints:
+
+1. `credential_offer_endpoint`: Retains its existing standard definition, serving strictly as the target for interactive user-facing `HTTP GET` browser redirects (Scenario 2).
+2. `credential_offer_push_endpoint` *(Proposed EDD Schema Extension)*: Dedicated exclusively to receiving back-channel M2M `HTTP POST` notifications for automated processing (Scenario 3 and 5).
+
+**Impact on Discovery:**  
+Implementing this dual-endpoint profile within the **EDD** allows the Issuer to inspect the directory records in advance. If the specialized push-endpoint is published in the directory for the target wallet, the Issuer immediately utilizes the M2M background route. If it is absent, the Issuer defaults to the standard `credential_offer_endpoint` via an interactive `HTTP GET` browser redirect. This eliminates runtime "trial-and-error" HTTP probing on the network and significantly increases transaction reliability across diverse vendor implementations in the pilot.
