@@ -68,6 +68,7 @@ Date: 13 October 2026
   - [7.6 Deferred Credential Endpoint](#76-deferred-credential-endpoint)
   - [7.7 Server Metadata](#77-server-metadata)
   - [7.8 Re-issuance](#78-re-issuance)
+  - [7.9 Authorization Challenge Endpoint](79-Authorization-Challenge-Endpoint)
 - [8. Interface Definitions](#8-interface-definitions)
   - [8.1 WU Invocation Interface](#81-wu-invocation-interface)
   - [8.2 Credential Offer Interface](#82-credential-offer-interface)
