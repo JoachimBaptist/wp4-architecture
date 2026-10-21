@@ -55,6 +55,13 @@ Fixed an error when returning the response from the Verifier to the Wallet after
   - [8.4 Verifier Metadata Interface](#84-verifier-metadata-interface)
 - [9. Conformance](#9-conformance)
 - [References](#references)
+- [Annex A: Improvement Proposal: Preserving Standard OAuth for Issuance and Expanding Endpoints for Presentation](#annex-a-improvement-proposal-preserving-standard-oauth-for-issuance-and-expanding-endpoints-for-presentation)
+  - [A.1 Introduction & Context](#a1-introduction--context)
+  - [A.2 The Core Conflict: Endpoint Overloading](#a2-the-core-conflict-endpoint-overloading)
+  - [A.3 Proposed Architecture: Introduction of a dedicated endpoint for using OpenID4VP](#a3-proposed-architecture-introduction-of-a-dedicated-endpoint-for-using-openid4vp)
+    - [A.3.1 The Issuance Side: Preserving the OAuth Standard (`authorization_endpoint`)](#a31-the-issuance-side-preserving-the-oauth-standard-authorization_endpoint)
+    - [A.3.2 The Presentation Side: A dedicated endpoint extension (`vp_authorization_endpoint`)](#a32-the-presentation-side-a-dedicated-endpoint-extension-vp_authorization_endpoint)
+  - [A.4 Strategic Benefits for the LSP](#a4-strategic-benefits-for-the-lsp)
 
 # 1. Introduction
 
@@ -91,7 +98,7 @@ This specification defines the conformance profile for high‑assurance credenti
     * SD‑JWT‑VC selective disclosure
     * Same‑device and cross‑device invocation
     * `openid4vp://` and `eu-eaap://` Wallet invocation (`haip-vp://` OPTIONAL) - EUDI wallet
-    * `https:\\` Wallet invocation - EB wallet (EBW)
+    * `https://` Wallet invocation - EB wallet (EBW)
     * `x509_hash` Client Identifier Scheme for the Verifier's `client_id`
     * `verifier_info` parameter carrying RP Registrar-provided data and, where available, the WRPRC
  
@@ -188,12 +195,14 @@ haip-vp://?request_uri=<URL>   # OPTIONAL
 
 **EBW**
 
-1. The Verifier retrieves the `authorization_endpoint` by using the lookup service at EDD ([12])
+1. The Verifier retrieves the `vp_authorization_endpoint` by using the lookup service at EDD ([12])
 
-2. The Verifier sends the Presentation Request to the business wallet's `authorization_endpoint` over the front-channel (redirects the user-agent).
+2. The Verifier sends the Presentation Request to the business wallet's `vp_authorization_endpoint` over the front-channel (redirects the user-agent).
 
 3. Wallet retrieves or validates the signed Presentation Request Object.
 
+>[!NOTE]
+>For `vp_authorization_endpoint` see Annex A.
 
 ### 6.1.3 WU Validation
 
@@ -297,7 +306,7 @@ Wallets MUST:
 2. Support the same‑device and cross‑device flows.
 3. Support invocation via
    *. EUDI wallet : `openid4vp://` and `eu-eaap://` custom URL schemes; `haip-vp://` support is OPTIONAL.
-   *. EBW : `https://`
+   *. EBW : `https://` (server-based solution)
 4. Validate signed Presentation Requests.
 5. Validate that the Verifier's `client_id` uses the `x509_hash` Client Identifier Scheme.
 6. Validate the `verifier_info` parameter, including the RP Registrar-provided data and, where present, the WRPRC.
@@ -306,7 +315,7 @@ Wallets MUST:
 9. Generate JWT‑based Presentation Proof.
 10. Bind Presentation Proof to Verifier’s nonce and audience.
 11. Submit Presentation Responses to the Presentation Response Endpoint.
-12. Must disclose the `authorization_endpoint` to which the presentation request can be sent, within EDD.
+12. Must disclose the `vp_authorization_endpoint` to which the presentation request can be sent, within EDD. (see Annex A)
 
 Wallets MUST NOT:
 
@@ -339,9 +348,11 @@ Verifier obligations are listed below in two groups: per-transaction protocol be
 
 **Verifiers MUST, at deployment:**
 
-6. Support same‑device and cross‑device invocation, via `openid4vp://` and `eu-eaap://` (`haip-vp://` OPTIONAL). (Wallet reciprocal: 7.1.2, 7.1.3)
-7. Publish Verifier Metadata.
-8. Provide a Presentation Response Endpoint. (Wallet reciprocal: 7.1.11)
+6. Support
+   * EUDI wallet : same‑device and cross‑device invocation, via `openid4vp://` and `eu-eaap://` (`haip-vp://` OPTIONAL). (Wallet reciprocal: 7.1.2, 7.1.3)
+   * EBW : same‑device, via `https://`. (Wallet reciprocal: 7.1.2, 7.1.3)
+8. Publish Verifier Metadata.
+9. Provide a Presentation Response Endpoint. (Wallet reciprocal: 7.1.11)
 
 Verifiers MUST NOT:
 
@@ -349,6 +360,7 @@ Verifiers MUST NOT:
 * Disable nonce or audience validation
 * Use a `client_id` scheme other than `x509_hash`
 * Omit `verifier_info` from the Presentation Request Object
+* return `redirect_uri` in the response to the `verifiable_presentation` in cross_device mode.
 
 # 8. Interface Definitions
 
@@ -356,12 +368,13 @@ Interfaces in this chapter follow the structure from the Issuance Conformance Sp
 
 ## 8.1 Wallet Invocation Interface
 
+**EUDI Wallet**
+
 Direction: Verifier → Wallet \
 Transport: `openid4vp://` or `eu-eaap://` scheme (WUs and Verifiers MUST support both); `haip-vp://` scheme (OPTIONAL) \
 Usage: Same-device or cross-device scanning
 
 Example:
-
 
 ```
 openid4vp://?request_uri=https://verifier.example.org/request/123
@@ -369,6 +382,21 @@ eu-eaap://?request_uri=https://verifier.example.org/request/123
 haip-vp://?request_uri=https://verifier.example.org/request/123
 ```
 
+Wallet MUST retrieve or validate the Presentation Request Object.
+
+
+**EBW**
+
+Direction: Verifier → Wallet \
+Transport: `https://` \
+Usage: Same-device
+
+Example:
+
+```
+HTTP/1.1 302 Found
+Location: https://example.business_wallet.com/vp_authorize?request_uri=...
+```
 
 Wallet MUST retrieve or validate the Presentation Request Object.
 
@@ -441,10 +469,22 @@ The Wallet MUST POST a single `response` parameter whose value is a compact-seri
   "state": "<echoed state, if present in the request>"
 }
 ```
+```
 { "vp_token": "<JWT-Presentation>", "format": "vc+sd-jwt" }
 ```
 
 **Success Response Example**
+
+_Same-device_
+
+```
+{
+  "status": "ok",
+  "redirect_uri": "https//client.example.org/cb",
+}
+```
+
+_Cross-device_
 
 ```
 { "status": "ok" }
