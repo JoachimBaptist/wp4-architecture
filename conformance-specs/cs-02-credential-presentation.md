@@ -1,10 +1,12 @@
 # WE BUILD - Conformance Specification:  Credential Presentation
 
-Version 1.2
-Date: 23 September 2026
+Version 1.3
+Date: 21 October 2026
 
 **Revision history**
 
+* Version 1.3 (21 October 2026): Introduction of the business wallet invocation mechanism; issue #249. The business wallet is a server-based application in the cloud. It requires a different invocation method compared to the personal wallet (EUDI wallet).<br/>
+Fixed an error when returning the response from the Verifier to the Wallet after the presentation has been sent. (6.1.7 and 6.2.7)
 * Version 1.2 (23 September 2026): Restricted the Verifier's `client_id` to the `x509_hash` Client Identifier Scheme, added `haip-vp://` and `eu-eaap://` as additional Wallet invocation schemes, and added the mandatory `verifier_info` parameter (RP Registrar-provided data and, where available, the WRPRC) to the Presentation Request Object, aligning with the finalised OpenID4VC HAIP 1.0 and ETSI TS 119 472-2, resolving issue [#341](https://github.com/webuild-consortium/wp4-architecture/issues/341). Also corrected and restructured Section 8.3 (Presentation Response Endpoint) to match OpenID4VP 1.0's actual `direct_post.jwt` semantics (encrypted `response` parameter, form-urlencoded transport, defined error codes, and the `redirect_uri` acknowledgement), and aligned Sections 6.1.6/6.1.7/6.2.6/6.2.7 accordingly.
 * Version 1.1 (30 April 2026): Approved.
 
@@ -16,6 +18,7 @@ Date: 23 September 2026
 * Nikolaos Triantafyllou, University of Aegean, Greece
 * Malin Norlander, Bolagsverket, Sweden
 * Martin Micuch, IDUnion, Germany
+* Peter Kooi, Belastingdienst, Netherlands
 
 ## Table Of Contents
 
@@ -65,6 +68,12 @@ It specifies a high‑assurance presentation profile for use within the WE BUILD
 * Support for SD‑JWT‑VC credentials [4]
 * Same‑device and cross‑device invocation patterns
 
+**Difference in Invocation: Mobile Wallet vs. Cloud-based Wallet**
+
+Within digital identity architectures (such as OpenID4VP), both types of wallets Are invoked via the front-channel (the end-user's browser). The distinction lies in how the verification request is technically handled:
+• Mobile Wallet (Deep-link): The browser activates a specific URI or deep-link (e.g., `eu-eaap://`). This triggers an immediate app-switch on the device, opening the local wallet application.
+• Cloud-based Wallet (API redirection): The browser remains within the web environment and forwards the presentation request (via redirection) to the cloud environment where the business wallet resides.
+
 This document complements the WE BUILD Conformance Specification: Credential Issuance v1.0. The document is used to build the WE BUILD Interoperability Test Bed Plus (ITB+) [5].
 
 
@@ -81,9 +90,15 @@ This specification defines the conformance profile for high‑assurance credenti
     * JWT‑based Presentation Proof
     * SD‑JWT‑VC selective disclosure
     * Same‑device and cross‑device invocation
-    * `openid4vp://` and `eu-eaap://` Wallet invocation (`haip-vp://` OPTIONAL)
+    * `openid4vp://` and `eu-eaap://` Wallet invocation (`haip-vp://` OPTIONAL) - EUDI wallet
+    * `https:\\` Wallet invocation - EB wallet (EBW)
     * `x509_hash` Client Identifier Scheme for the Verifier's `client_id`
     * `verifier_info` parameter carrying RP Registrar-provided data and, where available, the WRPRC
+ 
+>[!NOTE]
+OpenID4VP is very clear on this. OpenID4VP is built on OAuth, and the presentation request is submitted to the authorization endpoint. "... simple redirects to pass Authorization Request ..."
+This means that, within the existing frameworks, it is not possible to use OpenID4VP in an M2M (machine-to-machine) context.
+Support for interactive use only.
 
 # 3. Normative Language
 
@@ -109,7 +124,9 @@ The WE BUILD presentation profile is based on OpenID4VP with the following manda
 * JWT-Secured Authorisation Request (JAR): All authorisation requests MUST be signed.
 * Digital Credentials Query Language (DCQL): MUST be used for querying credentials.
 * Client Identifier Scheme: The Verifier's `client_id` MUST use the `x509_hash` Client Identifier Prefix. Other prefixes (`x509_san_dns`, `verifier_attestation`, `did:web`, `did:jwk`) MUST NOT be used. (See **NOTE_CS02_02**)
-* Wallet Invocation Schemes: `openid4vp://` and `eu-eaap://` MUST be supported for non-API mediated invocation; `haip-vp://` MAY additionally be supported. (See **NOTE_CS02_03**)
+* Wallet Invocation Schemes:
+  *  EUDI Wallet : `openid4vp://` and `eu-eaap://` MUST be supported for non-API mediated invocation; `haip-vp://` MAY additionally be supported. (See **NOTE_CS02_03**)
+  *  EBW : `https://` (server-based solution)
 * Verifier Info: The Request Object MUST contain the `verifier_info` parameter, carrying RP Registrar-provided data and, where the Verifier holds one, its WRPRC (Wallet-Relying Party Registration Certificate). (See **NOTE_CS02_04**)
 * Crypto Suites: Strict adherence to P-256 (secp256r1) with ES256 for signing.
 * Holder Binding: Mandatory Key Binding JWT (KB-JWT) for SD-JWT VCs. (See **NOTE_CS02_01**)
@@ -117,7 +134,7 @@ The WE BUILD presentation profile is based on OpenID4VP with the following manda
 High‑level steps:
 
 1. Verifier creates Presentation Request, including `verifier_info`
-2. Wallet is invoked via `openid4vp://`, `eu-eaap://`, or `haip-vp://` (same or cross device)
+2. Wallet is invoked via `openid4vp://`, `eu-eaap://`, or `haip-vp://` (same or cross device) or `https://` depending on the wallet-type.
 3. Wallet validates Presentation Request
 4. Holder consents
 5. Wallet generates Presentation Proof + Disclosures
@@ -137,6 +154,9 @@ High‑level steps:
 
 This chapter defines the presentation flows required by WE BUILD.
 
+>[!NOTE]
+In a fully server-based setup of the Business Wallet, it meets the definition of the "same-device" scenario.
+
 ## 6.1 Same-device Presentation Flow
 
 ### 6.1.1 Presentation Request Creation
@@ -154,7 +174,9 @@ The request MUST be integrity‑protected (JAR‑style or equivalent).
 
 ### 6.1.2 WU Invocation
 
-The Verifier redirects the user-agent to the WU using one of the supported invocation schemes (**NOTE_CS02_03**):
+**EUDI wallet**
+
+1. The Verifier redirects the user-agent to the WU using one of the supported invocation schemes (**NOTE_CS02_03**):
 
 ```
 openid4vp://?request_uri=<URL>
@@ -162,7 +184,16 @@ eu-eaap://?request_uri=<URL>
 haip-vp://?request_uri=<URL>   # OPTIONAL
 ```
 
-Wallet retrieves or validates the signed Presentation Request Object.
+2. Wallet retrieves or validates the signed Presentation Request Object.
+
+**EBW**
+
+1. The Verifier retrieves the `authorization_endpoint` by using the lookup service at EDD ([12])
+
+2. The Verifier sends the Presentation Request to the business wallet's `authorization_endpoint` over the front-channel (redirects the user-agent).
+
+3. Wallet retrieves or validates the signed Presentation Request Object.
+
 
 ### 6.1.3 WU Validation
 
@@ -215,7 +246,7 @@ If the Wallet cannot produce a Presentation, it MUST instead submit a Presentati
 
 ### 6.1.7 Result Handling
 
-The Verifier's Response Endpoint MUST acknowledge the submission as defined in Section 8.3 (HTTP `200 OK` with an optional `redirect_uri`). Verification of the Presentation (Section 7.2 item 5) and communication of its outcome to the Holder MUST occur via the Verifier's own user interface, reached either directly (same-device) or via the `redirect_uri` (cross-device, or session-fixation protection).
+The Verifier's Response Endpoint MUST acknowledge the submission as defined in Section 8.3 (HTTP `200 OK` with a `redirect_uri`). Verification of the Presentation (Section 7.2 item 5) and communication of its outcome to the Holder MUST occur via the Verifier's own user interface, reached either directly (cross-device, or session-fixation protection) or via the `redirect_uri` (same-device).
 
 Wallet MUST correctly display any outcome communicated to it to the Holder.
 
@@ -251,7 +282,7 @@ WU delivers the Presentation Response as in 6.1.6, directly to the Verifier’s 
 
 ### 6.2.7 Result Handling
 
-Verifier's Response Endpoint acknowledges the submission and the outcome is communicated to the Holder as in 6.1.7; the `redirect_uri` mechanism is the primary means of conveying the outcome back on the Wallet's device in this cross-device flow.
+Verifier's Response Endpoint acknowledges the submission and the outcome is communicated to the Holder as in 6.1.7; in a cross-device flow, it is not necessary to return a `redirect_uri` in the response to the WU.
 
 
 # 7. Normative Requirements
@@ -264,7 +295,9 @@ Wallets MUST:
 
 1. Support HAIP‑compliant OpenID4VP.
 2. Support the same‑device and cross‑device flows.
-3. Support invocation via the `openid4vp://` and `eu-eaap://` custom URL schemes; `haip-vp://` support is OPTIONAL.
+3. Support invocation via
+   *. EUDI wallet : `openid4vp://` and `eu-eaap://` custom URL schemes; `haip-vp://` support is OPTIONAL.
+   *. EBW : `https://`
 4. Validate signed Presentation Requests.
 5. Validate that the Verifier's `client_id` uses the `x509_hash` Client Identifier Scheme.
 6. Validate the `verifier_info` parameter, including the RP Registrar-provided data and, where present, the WRPRC.
@@ -273,6 +306,7 @@ Wallets MUST:
 9. Generate JWT‑based Presentation Proof.
 10. Bind Presentation Proof to Verifier’s nonce and audience.
 11. Submit Presentation Responses to the Presentation Response Endpoint.
+12. Must disclose the `authorization_endpoint` to which the presentation request can be sent, within EDD.
 
 Wallets MUST NOT:
 
@@ -463,3 +497,31 @@ An implementation **conforms to this specification as an Issuer** if it:
 [4]	IETF (2025) SD‑JWT‑based Verifiable Credentials. IETF. Available at: https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-09.html (Accessed: 24 November 2025).
 
 [5]	WE BUILD (2025) Interoperability Test Bed - Reference Specification, 12 November, Available at: [https://github.com/webuild-consortium/wp4-interop-test-bed/blob/main/docs/reference-implementation-interoperability-test-bed.md](https://github.com/webuild-consortium/wp4-interop-test-bed/blob/main/docs/reference-implementation-interoperability-test-bed.md) (Accessed: 24 November 2025).
+
+[6]	WE BUILD (2026) Conformance Specification CS-17: Directory & Discovery (EDD)
+
+# Annex A: Improvement Proposal: Preserving Standard OAuth for Issuance and Expanding Endpoints for Presentation
+
+## A.1 Introduction & Context
+Due to it's nature, the **Business Wallet** fulfills a dual role: it acts as an **Issuer** via OpenID4VCI and as a **Holder** via OpenID4VP. Because both protocols are built on top of the OAuth 2.0 and OIDC infrastructure, a routing conflict emerges in practice when attempting to funnel both traffic streams through identical endpoints. 
+
+To resolve this conflict without disrupting proven OAuth infrastructures, this annex proposes the introduction of a new endpoint, which allows the business wallet to implement the functionality in a completely separate manner.
+
+## A.2 The Core Conflict: Endpoint Overloading
+When adhering to the interactive `grant_type=authorization_code` flow for credential issuance, the Business Wallet acts as a traditional OAuth Authorization Server. External applications that wish to receive a credential initiate the process by requesting an access token. To do this, they call the `authorization_endpoint` of the wallet.
+
+The conflict arises as soon as that same Business Wallet is required to act as a holder and is asked to provide a verifiable presentation. The verifier submits this request to the `authorization_endpoint`. Although OpenID4VP employs OAuth terminology, the payload (such as the `presentation_definition`) differs fundamentally from a standard OAuth authorization request. 
+Using the same endpoint for both an authorization request and a presentation request leads to complexity, with potential security risks as a result.
+
+## A.3 Proposed Architecture: Introduction of a dedicated endpoint for using OpenID4VP
+
+Decoupling of the Business Wallet endpoints based on the active role of the wallet:
+### A.3.1 The Issuance Side: Preserving the OAuth Standard (`authorization_endpoint`)
+The credential issuance flow remains 100% compliant with the standard OAuth 2.0 specification.
+* Issuers initiate a standard authorization code flow. Authorization Servers and OAuth libraries can process these requests out-of-the-box (maximum interoperability).
+
+### A.3.2 The Presentation Side: A dedicated endpoint extension (`vp_authorization_endpoint`)
+A specific endpoint will be introduced for the 'Holder' role of the Business Wallet. This endpoint is specific to the implementation of the OpenID4VP specification and ensures that its logic is not intermingled with the logic for issuing access tokens.
+
+## A.4 Strategic Benefits for the LSP
+* Zero Breaking Changes for OAuth Infrastructure:<br/>The issuance pipeline remains clean and standard. There is no need to inject complex "if/else" conditions into off-the-shelf OAuth gateways to parse OpenID4VP anomalies.
