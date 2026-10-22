@@ -34,6 +34,7 @@ Propose new ADRs using the [template](_template.md). Announce them to the [Archi
 25. [Verify QERDS Provider trust via Trusted Lists before and after delivery](qerds-delivery-trust-evaluation.md)
 26. [Verify EAA issuer key binding via an AuthZEN API call](eaa-key-binding-authzen.md)
 27. [Exclusion of Portrait from the WE BUILD PID Profile](adr/exlusion-of-portrait-from-pid-profile.md)
+28. [PID Attributes for Cross-Border Identity Matching](‎adr/002-identity-matching-and-subject-linking.md)
 <!--END INDEX-->
 
 ## Supporting analysis
