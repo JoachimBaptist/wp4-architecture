@@ -5,8 +5,8 @@ Date: 21 October 2026
 
 **Revision history**
 
-* Version 1.3 (21 October 2026): Introduction of the business wallet invocation mechanism; issue #249. The business wallet is a server-based application in the cloud. It requires a different invocation method compared to the personal wallet (EUDI wallet).<br/>
-Fixed an error when returning the response from the Verifier to the Wallet after the presentation has been sent. (6.1.7 and 6.2.7)
+* Version 1.3 (21 October 2026): Introduction of the business wallet invocation mechanism; issue #249. The business wallet is a server-based application in the cloud. It requires a different invocation method compared to the personal wallet (EUDI wallet).<br/>The Business Wallet can also be used in an M2M scenario. Proposal for an M2M profile in Annex A.<br/>
+Fix: `redirect_uri` in response only necessary in same-device scenario and not in cross-device scenario. (6.1.7 and 6.2.7)
 * Version 1.2 (23 September 2026): Restricted the Verifier's `client_id` to the `x509_hash` Client Identifier Scheme, added `haip-vp://` and `eu-eaap://` as additional Wallet invocation schemes, and added the mandatory `verifier_info` parameter (RP Registrar-provided data and, where available, the WRPRC) to the Presentation Request Object, aligning with the finalised OpenID4VC HAIP 1.0 and ETSI TS 119 472-2, resolving issue [#341](https://github.com/webuild-consortium/wp4-architecture/issues/341). Also corrected and restructured Section 8.3 (Presentation Response Endpoint) to match OpenID4VP 1.0's actual `direct_post.jwt` semantics (encrypted `response` parameter, form-urlencoded transport, defined error codes, and the `redirect_uri` acknowledgement), and aligned Sections 6.1.6/6.1.7/6.2.6/6.2.7 accordingly.
 * Version 1.1 (30 April 2026): Approved.
 
@@ -45,6 +45,14 @@ Fixed an error when returning the response from the Verifier to the Wallet after
     - [6.2.5 Presentation Generation](#625-presentation-generation)
     - [6.2.6 Presentation Submission](#626-presentation-submission)
     - [6.2.7 Result Handling](#627-result-handling)
+  - [6.3 M2M Presentation Flow](#63-m2m-presentation-flow)
+    - [6.3.1 Presentation Request Creation and Display](#631-presentation-request-creation-and-display)
+    - [6.3.2 Wallet Unit Invocation via HTTP GET](#632-wallet-unit-invocation-via-http-get)
+    - [6.3.3 Wallet Validation](#633-wallet-validation)
+    - [6.3.4 Holder Consent](#634-holder-consent)
+    - [6.3.5 Presentation Generation](#635-presentation-generation)
+    - [6.3.6 Presentation Submission](#636-presentation-submission)
+    - [6.3.7 Result Handling](#637-result-handling)
 - [7. Normative Requirements](#7-normative-requirements)
   - [7.1 Wallet Unit Requirements](#71-wallet-unit-requirements)
   - [7.2 Verifier Requirements](#72-verifier-requirements)
@@ -55,13 +63,17 @@ Fixed an error when returning the response from the Verifier to the Wallet after
   - [8.4 Verifier Metadata Interface](#84-verifier-metadata-interface)
 - [9. Conformance](#9-conformance)
 - [References](#references)
-- [Annex A: Improvement Proposal: Preserving Standard OAuth for Issuance and Expanding Endpoints for Presentation](#annex-a-improvement-proposal-preserving-standard-oauth-for-issuance-and-expanding-endpoints-for-presentation)
-  - [A.1 Introduction & Context](#a1-introduction--context)
-  - [A.2 The Core Conflict: Endpoint Overloading](#a2-the-core-conflict-endpoint-overloading)
-  - [A.3 Proposed Architecture: Introduction of a dedicated endpoint for using OpenID4VP](#a3-proposed-architecture-introduction-of-a-dedicated-endpoint-for-using-openid4vp)
-    - [A.3.1 The Issuance Side: Preserving the OAuth Standard (`authorization_endpoint`)](#a31-the-issuance-side-preserving-the-oauth-standard-authorization_endpoint)
-    - [A.3.2 The Presentation Side: A dedicated endpoint extension (`vp_authorization_endpoint`)](#a32-the-presentation-side-a-dedicated-endpoint-extension-vp_authorization_endpoint)
-  - [A.4 Strategic Benefits for the LSP](#a4-strategic-benefits-for-the-lsp)
+- [Annex A: Synchronous Machine-to-Machine (M2M) OpenID4VP Profile](#annex-a-synchronous-machine-to-machine-m2m-openid4vp-profile)
+  - [A.1 Functional & Architectural Overview](#a1-functional--architectural-overview)
+  - [A.2 Process Walkthrough](#a2-process-walkthrough)
+- [Annex B: Improvement Proposal: Preserving Standard OAuth for Issuance and Expanding Endpoints for Presentation](#annex-b-improvement-proposal-preserving-standard-oauth-for-issuance-and-expanding-endpoints-for-presentation)
+  - [B.1 Introduction & Context](#b1-introduction--context)
+  - [B.2 The Core Conflict: Endpoint Overloading](#b2-the-core-conflict-endpoint-overloading)
+  - [B.3 Proposed Architecture: Dual Presentation Endpoints](#b3-proposed-architecture-dual-presentation-endpoints)
+    - [B.3.1 The Issuance Side: Preserving the OAuth Standard](#b31-the-issuance-side-preserving-the-oauth-standard)
+    - [B.3.2 The Presentation Side: Interactive Profile](#b32-the-presentation-side-interactive-profile)
+    - [B.3.3 The Presentation Side: Machine-to-Machine Profile)](#b33-the-presentation-side-machine-to-machine-profile)
+  - [B.4 Strategic Benefits for the LSP](#b4-strategic-benefits-for-the-lsp)
 
 # 1. Introduction
 
@@ -74,12 +86,7 @@ It specifies a high‑assurance presentation profile for use within the WE BUILD
 * Security, privacy and interoperability requirements
 * Support for SD‑JWT‑VC credentials [4]
 * Same‑device and cross‑device invocation patterns
-
-**Difference in Invocation: Mobile Wallet vs. Cloud-based Wallet**
-
-Within digital identity architectures (such as OpenID4VP), both types of wallets Are invoked via the front-channel (the end-user's browser). The distinction lies in how the verification request is technically handled:
-• Mobile Wallet (Deep-link): The browser activates a specific URI or deep-link (e.g., `eu-eaap://`). This triggers an immediate app-switch on the device, opening the local wallet application.
-• Cloud-based Wallet (API redirection): The browser remains within the web environment and forwards the presentation request (via redirection) to the cloud environment where the business wallet resides.
+* Support for both interactive and machine-to-machine (M2M) use
 
 This document complements the WE BUILD Conformance Specification: Credential Issuance v1.0. The document is used to build the WE BUILD Interoperability Test Bed Plus (ITB+) [5].
 
@@ -101,11 +108,22 @@ This specification defines the conformance profile for high‑assurance credenti
     * `https://` Wallet invocation - EB wallet (EBW)
     * `x509_hash` Client Identifier Scheme for the Verifier's `client_id`
     * `verifier_info` parameter carrying RP Registrar-provided data and, where available, the WRPRC
+    * Interactive and machine-to-machine (M2M)
  
->[!NOTE]
-OpenID4VP is very clear on this. OpenID4VP is built on OAuth, and the presentation request is submitted to the authorization endpoint. "... simple redirects to pass Authorization Request ..."
-This means that, within the existing frameworks, it is not possible to use OpenID4VP in an M2M (machine-to-machine) context.
-Support for interactive use only.
+
+**EUDI Wallet vs. server-based Business Wallet (EBW)**
+
+*Invocation Differences*
+
+The OpenID4VP specification indicates that both types of wallets are invoked via the front-channel (the end-user's browser). The distinction lies in how the verification request is technically handled:
+*   EUDI Wallet (Deep-link): The browser activates a specific URI or deep-link (e.g., `eu-eaap://`). This triggers an immediate app-switch on the device, opening the local wallet application.
+*   Server-based Business Wallet (API redirection): The browser remains within the web environment and forwards the presentation request (via HTTP redirection) to the cloud environment where the business wallet resides.
+
+*M2M Interaction : Business Wallet only*
+
+Requesting a verifiable presentation from the EUDI wallet is only possible if the holder is actively involved in the process. The holder interacts with an online service provided by the Verifier and is asked to use their EUDI wallet to make data available.<br/>
+A fundamental principle of the Business Wallet is that it must be accessible at any time of day for providing verifiable presentations. This requires the Business Wallet to be capable of providing such verifiable presentations in an automated manner.<br/>
+Therefore, in addition to interaction via the 'front-channel,' this conformity specification also defines the profile for requesting a verifiable presentation in an M2M context. This profile remains closely aligned with the architecture of OpenID4VP and the the building blocks and requirements defined within this document, eliminating the need to establish a separate infrastructure for M2M traffic.
 
 # 3. Normative Language
 
@@ -159,7 +177,8 @@ High‑level steps:
 
 # 6. High-level Flows
 
-This chapter defines the presentation flows required by WE BUILD.
+This chapter defines the presentation flows required by WE BUILD.<br/>
+Sections 6.1 and 6.2 relate to interactive use, section 6.3 to M2M use.
 
 >[!NOTE]
 In a fully server-based setup of the Business Wallet, it meets the definition of the "same-device" scenario.
@@ -202,7 +221,7 @@ haip-vp://?request_uri=<URL>   # OPTIONAL
 3. Wallet retrieves or validates the signed Presentation Request Object.
 
 >[!NOTE]
->For `vp_authorization_endpoint` see Annex A.
+>For `vp_authorization_endpoint` see Annex B.
 
 ### 6.1.3 WU Validation
 
@@ -294,6 +313,61 @@ WU delivers the Presentation Response as in 6.1.6, directly to the Verifier’s 
 Verifier's Response Endpoint acknowledges the submission and the outcome is communicated to the Holder as in 6.1.7; in a cross-device flow, it is not necessary to return a `redirect_uri` in the response to the WU.
 
 
+## 6.3 M2M Presentation Flow
+
+### 6.3.1 Presentation Request Creation and Display
+
+Verifier constructs the Presentation Request Object (as in 6.1.1).
+
+
+### 6.3.2 Wallet Unit Invocation via HTTP GET
+
+**EBW**
+
+1. The Verifier retrieves the `vp_m2m_authorization_endpoint` by using the lookup service at EDD ([12])
+   If `vp_m2m_authorization_endpoint` is not present, the WU in question does not support M2M.
+
+2. The Verifier sends the Presentation Request to the WU's `vp_m2m_authorization_endpoint` over the back-channel (HTTP GET).
+   This initiates a synchronous process following the Request/Response pattern.
+   Unlike the interactive pattern, in which a redirect is used to return from the WU, in this case the WU sends a response back following the processing of the request. The Verifier’s process then continues automatically. (For details, see Annex A.)
+
+   1. WU retrieves or validates the signed Presentation Request Object. (6.3.3)
+   2. WU generates the verifiable presentation. (6.3.5)
+   3. WU submits the verifiable presentation. (6.3.6)
+   4. WU answers with a response to the Presentation Request (6.3.7)
+
+3. The Verifier’s process continues automatically.
+
+>[!NOTE]
+>For `vp_m2m_authorization_endpoint` see Annex B.
+
+
+### 6.3.3 Wallet Validation
+
+The same validation rules as 6.1.3 apply.
+
+### 6.3.4 Holder Consent
+
+Not applicable to M2M
+
+### 6.3.5 Presentation Generation
+
+Same as 6.1.5.
+
+### 6.3.6 Presentation Submission
+
+WU delivers the Presentation Response as in 6.1.6, directly to the Verifier’s Presentation Response Endpoint (back channel).
+
+### 6.3.7 Result Handling
+
+Verifier's Response Endpoint acknowledges the submission and in response, the WU sends a reply to the initial Presentation Request.
+This terminates the connection with the WU.
+
+* `state`, echoing the Presentation Request's `state` parameter, where present
+
+>[!NOTE]
+>Although it is not strictly necessary to return correlating data in case of synchronous processing, the M2M profile that has been introduced opts to include the `state` parameter in the response.
+
 # 7. Normative Requirements
 
 The requirements in 7.1 and 7.2 attach to the OpenID4VP **roles** of Wallet Unit and Verifier respectively, as defined in chapter 4, not to the products or organisations implementing them. A relying party deploying a multi-role software product (for example a Business Wallet) to implement the Verifier role is a normal and supported pattern; the obligations in 7.2 apply to the Verifier role inside that product.
@@ -315,16 +389,23 @@ Wallets MUST:
 9. Generate JWT‑based Presentation Proof.
 10. Bind Presentation Proof to Verifier’s nonce and audience.
 11. Submit Presentation Responses to the Presentation Response Endpoint.
-12. Must disclose the `vp_authorization_endpoint` to which the presentation request can be sent, within EDD. (see Annex A)
+12. Disclose the `vp_authorization_endpoint` to which the presentation request can be sent, within EDD. (see Annex B)
+13. Include the `state` parameter in the response to the initiating M2M Presentation request. 
 
 Wallets MUST NOT:
 
 * Accept unsigned or invalid Presentation Requests
 * Accept requests whose `client_id` does not use the `x509_hash` Client Identifier Scheme
 * Accept requests missing the `verifier_info` parameter
-* Auto‑consent
+* Auto‑consent (interactive scenarios only)
 * Add unsolicited claims
 
+Business Wallets MAY:
+
+* Support the M2M Presentation flow
+* Disclose the `vp_m2m_authorization_endpoint` to which the M2M presentation request can be sent, within EDD. (see Annex B)<br/>
+  If the business wallet supports the M2M Presentation flow, the `vp_m2m_authorization_endpoint` MUST be disclosed within EDD.
+  
 ## 7.2 Verifier Requirements
 
 Verifier obligations are listed below in two groups: per-transaction protocol behaviours, and deployment-time obligations. All items are normative MUSTs. The wallet's reciprocal duty for the same protocol step is referenced in parentheses.
@@ -362,6 +443,10 @@ Verifiers MUST NOT:
 * Omit `verifier_info` from the Presentation Request Object
 * return `redirect_uri` in the response to the `verifiable_presentation` in cross_device mode.
 
+Verifiers MAY:
+
+* Support the M2M Presentation flow
+
 # 8. Interface Definitions
 
 Interfaces in this chapter follow the structure from the Issuance Conformance Specification.
@@ -385,8 +470,9 @@ haip-vp://?request_uri=https://verifier.example.org/request/123
 Wallet MUST retrieve or validate the Presentation Request Object.
 
 
-**EBW**
+**EBW (Interactive)**
 
+*Interactive mode*
 Direction: Verifier → Wallet \
 Transport: `https://` \
 Usage: Same-device
@@ -396,6 +482,26 @@ Example:
 ```
 HTTP/1.1 302 Found
 Location: https://example.business_wallet.com/vp_authorize?request_uri=...
+```
+
+**EBW - M2M Interaction**
+Direction: Verifier → Wallet \
+Method: GET \
+
+Example:
+
+```
+GET /vp_m2m_authorize?request_uri=https%3A%2F%://example.com%2Frequest%2F123456789 HTTP/1.1
+Host: example.business_wallet.com
+Accept: application/json
+```
+
+**Success Response Example**
+
+```
+{
+  "state": "dftvhdgwvv4bh27"
+}
 ```
 
 Wallet MUST retrieve or validate the Presentation Request Object.
@@ -540,28 +646,85 @@ An implementation **conforms to this specification as an Issuer** if it:
 
 [6]	WE BUILD (2026) Conformance Specification CS-17: Directory & Discovery (EDD)
 
-# Annex A: Improvement Proposal: Preserving Standard OAuth for Issuance and Expanding Endpoints for Presentation
+# Annex A: Synchronous Machine-to-Machine (M2M) OpenID4VP Profile
 
-## A.1 Introduction & Context
-Due to it's nature, the **Business Wallet** fulfills a dual role: it acts as an **Issuer** via OpenID4VCI and as a **Holder** via OpenID4VP. Because both protocols are built on top of the OAuth 2.0 and OIDC infrastructure, a routing conflict emerges in practice when attempting to funnel both traffic streams through identical endpoints. 
+## A.1 Functional & Architectural Overview 
 
-To resolve this conflict without disrupting proven OAuth infrastructures, this annex proposes the introduction of a new endpoint, which allows the business wallet to implement the functionality in a completely separate manner.
+This annex defines the synchronous M2M profile for **OpenID for Verifiable Presentations (OpenID4VP)** within the WE BUILD ecosystem. Unlike the standard User-to-Machine (U2M) flow — which relies on asynchronous browser redirects, user agent interactions, and decoupled callback endpoints — this M2M profile is designed for automated, system-to-system transactions between the Verifier and the European Business Wallet (EBW). 
 
-## A.2 The Core Conflict: Endpoint Overloading
-When adhering to the interactive `grant_type=authorization_code` flow for credential issuance, the Business Wallet acts as a traditional OAuth Authorization Server. External applications that wish to receive a credential initiate the process by requesting an access token. To do this, they call the `authorization_endpoint` of the wallet.
+To eliminate the need for complex polling mechanisms or state reconstruction on the Verifier's side, this profile uses a stateful Request/Response pattern. The Verifier initiates the transaction via a HTTP GET request and keeps the transport channel open. The EBW acts as the orchestrator, executing the necessary back-channel steps (fetching the request object and delivering the payload) before responding to this GET request. 
 
-The conflict arises as soon as that same Business Wallet is required to act as a holder and is asked to provide a verifiable presentation. The verifier submits this request to the `authorization_endpoint`. Although OpenID4VP employs OAuth terminology, the payload (such as the `presentation_definition`) differs fundamentally from a standard OAuth authorization request. 
-Using the same endpoint for both an authorization request and a presentation request leads to complexity, with potential security risks as a result.
+The required modifications compared to the standard protocol have been strictly limited. This profile is explicitly designed to mirror the standard process flow described in OpenID4VP as closely as possible, keeping it fully aligned with the Conformance Specification of WE BUILD. As a result the building blocks and standards prescribed within this Conformance Specification can be optimally reused within this M2M flow. Consequently, this M2M profile introduces zero new parameters or protocol extensions. The sole difference lies in the runtime execution flow of the Verifier: while a U2M flow terminates the initial thread and forces the Verifier to reconstruct the transaction state at a decoupled callback endpoint, this stateful M2M profile maintains a synchronous thread. Execution resumes immediately on the exact same line of code that initiated the transaction as soon as the EBW closes the primary HTTP GET connection.
 
-## A.3 Proposed Architecture: Introduction of a dedicated endpoint for using OpenID4VP
+## A.2 Process Walkthrough
 
-Decoupling of the Business Wallet endpoints based on the active role of the wallet:
-### A.3.1 The Issuance Side: Preserving the OAuth Standard (`authorization_endpoint`)
+```mermaid
+sequenceDiagram
+  autonumber
+  participant V as Verifier
+  participant B as EBW
+
+  Note over V,B: Phase 1: Transaction Initialization & Wait State
+  activate V
+  V->>B: HTTP GET /vp_m2m_authorize (response_mode=direct_post.jwt, response_uri, state)
+  activate B
+  Note over V: Thread enters blocking wait status.<br/>HTTP Connection remains open.
+
+  Note over V,B: Phase 2: Request Resolution & Token Delivery
+  B->>V: HTTP GET /request-object
+  V-->>B: HTTP 200 OK (presentation_definition)
+
+  B->>V: HTTP POST [response_uri] (JWE containing vp_token + state)
+  Note over V: Decrypts & validates token.<br/>Correlates using state.
+  V-->>B: HTTP 200 OK Acknowledgment
+
+  Note over V,B: Phase 3: Synchronous Handshake Closure
+  B-->>V: HTTP 200 OK (body: state)
+  deactivate B
+
+  Note over V: Thread awakes on the same line of code.<br/>Processing continues immediately.
+  deactivate V
+```
+
+1. **Transaction Initialization (`GET /authorize`):** The Verifier establishes a connection and fires an HTTP GET request to the M2M-specific authorization endpoint of the EBW. The Verifier requests a `response_mode` of `direct_post.jwt`, specifies its routing metadata (`response_uri`), and passes a unique transaction identifier in the **`state`** parameter. The Verifier's execution thread enters a blocking wait state, keeping the HTTP connection active.
+2. **Request Fetching (`GET /request`):** The EBW processes the incoming call. Before responding, it opens a secondary, independent HTTP connection back to the Verifier to fetch the specific Request Object.
+3. **Request Delivery:** The Verifier serves the Request Object over the secondary connection back to the EBW.
+4. **Credential Issuance & Delivery (`POST /vp_token`):** The EBW evaluates the request requirements, retrieves the matching verifiable credentials and compiles the `vp_token`. Applying the requested `direct_post.jwt` mode, the EBW packages the payload into a JWE envelope and executes an HTTP POST to the Verifier's `response_url`, including the matching **`state`** parameter in the payload.
+5. **Payload Acknowledgment:** The Verifier receives and validates the incoming `vp_token` payload on its callback endpoint. Because the Verifier is stateful and tracks the transaction in real-time, it correlates the payload directly using the **`state`** parameter. The Verifier then responds to the EBW's POST with a standard HTTP `200 OK` acknowledgment.
+6. **Transaction Closure (The Final Sync):** Having received confirmation that the Verifier successfully processed the data for this transaction, the EBW terminates the original, long-standing transaction. It sends a final HTTP `200 OK` response back through the primary connection opened in Step 1, returning the **`state`** parameter as confirmation. The Verifier’s waiting thread instantly awakes on the exact line of code that initiated the sequence, detects the successful completion for that `state`, and seamlessly proceeds with processing the received credentials. 
+
+
+# Annex B: Improvement Proposal: Preserving Standard OAuth for Issuance and Expanding Endpoints for Presentation
+
+## B.1 Introduction & Context
+Due to its nature, the **Business Wallet** fulfills a dual role: it acts as an **Issuer** via OpenID4VCI and as a **Holder** via OpenID4VP. Because both protocols are built on top of the OAuth 2.0 and OIDC infrastructure, a routing conflict emerges in practice when attempting to funnel all traffic streams through identical endpoints. 
+
+To resolve this conflict without disrupting proven OAuth infrastructures, this annex proposes a clean separation of concerns by introducing **two dedicated endpoint extensions for presentation**. This approach keeps the standard OAuth endpoints exclusively for issuance, while providing specific, logically named endpoints for both interactive and M2M presentation flows.
+
+## B.2 The Core Conflict: Endpoint Overloading
+When adhering to the interactive `grant_type=authorization_code` flow for credential issuance, the Business Wallet acts as a traditional OAuth Authorization Server. External applications that wish to receive a credential initiate the process by requesting an access token by calling the authorization endpoint of the wallet. 
+
+The conflict arises as soon as that same Business Wallet is required to act as a holder to provide a verifiable presentation. Triggering presentation requests via the exact same authorization endpoint leads to severe routing complexity and potential security risks within off-the-shelf OAuth gateways, as the payload structures (such as the `presentation_definition`) differ fundamentally. To keep the architecture clean and maintainable, a complete separation of paths is required for each specific flow profile.
+
+## B.3 Proposed Architecture: Dual Presentation Endpoints
+This architecture decouples the Business Wallet endpoints based on both the active role (Issuer vs. Holder) and the interaction profile (Interactive vs. M2M), introducing two distinct presentation endpoints:
+
+### B.3.1 The Issuance Side: Preserving the OAuth Standard
 The credential issuance flow remains 100% compliant with the standard OAuth 2.0 specification.
-* Issuers initiate a standard authorization code flow. Authorization Servers and OAuth libraries can process these requests out-of-the-box (maximum interoperability).
+* **Flow integrity:** Issuers initiate a standard authorization code flow via the default `authorization_endpoint`. 
+* **Interoperability:** Authorization Servers and OAuth libraries process these requests out-of-the-box without requiring custom routing or parsing rules.
 
-### A.3.2 The Presentation Side: A dedicated endpoint extension (`vp_authorization_endpoint`)
-A specific endpoint will be introduced for the 'Holder' role of the Business Wallet. This endpoint is specific to the implementation of the OpenID4VP specification and ensures that its logic is not intermingled with the logic for issuing access tokens.
+### B.3.2 The Presentation Side: Interactive Profile
+For interactive/frontend presentation flows involving user or browser redirection, a dedicated endpoint named `vp_authorization_endpoint` is utilized.
+* **Isolation of Concerns:** This endpoint isolates the complex front-channel OpenID4VP presentation logic (such as browser-based redirection and user consent) away from both the issuance and the M2M pipelines.
+* **Conflict Avoidance:** It completely eliminates routing collisions that occur when browser-based issuance and browser-based presentation share the same path.
 
-## A.4 Strategic Benefits for the LSP
-* Zero Breaking Changes for OAuth Infrastructure:<br/>The issuance pipeline remains clean and standard. There is no need to inject complex "if/else" conditions into off-the-shelf OAuth gateways to parse OpenID4VP anomalies.
+### B.3.3 The Presentation Side: Machine-to-Machine Profile
+For M2M verifiable presentations, a dedicated endpoint named `vp_m2m_authorization_endpoint` is introduced.
+* **Standard Alignment:** The internal logic of this endpoint stays as close as possible to the pure OpenID4VP presentation request specifications and respects the guidelines within the WE BUILD conformance specifications.
+* **Path Separation:** By giving the M2M flow its own explicit endpoint, back-to-back automated traffic is fully isolated from the standard issuance pipeline, preventing gateway confusion.
+
+## B.4 Strategic Benefits for the LSP
+* **Optimal Alignment with WE BUILD:** The `vp_m2m_authorization_endpoint` is tailored to implement the OpenID4VP requirements exactly as envisioned within the WE BUILD conformance specifications, but without the downside of endpoint pollution.
+* **Zero Breaking Changes for Issuance:** The standard issuance pipeline remains untouched and strictly compliant with standard OAuth 2.0 gateways.
+* **Maximum Security & Auditability:** Explicit endpoints for explicit flows mean that security policies, firewalls, and rate-limiting can be configured highly granularly per endpoint.
