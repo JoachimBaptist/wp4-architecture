@@ -61,7 +61,7 @@ graph TB
 | CS-007   | [Credential Presentation and Issuance via the Digital Credentials API](cs-07-credential-presentation-dc-api.md) |
 | CS-010   | [Revocation Mechanism - v1.1](cs-10-revocation-mechanism.md) |
 | CS-012   | [SCA Attestations for Payment Transactions (TS12 Profile) - v1.0](cs-12-sca-payments.md) |
-| CS-013   | [Relying Party Intermediaries](cs-13-intermediary-services-preflight.md) |
+| CS-013   | [Relying Party Intermediaries v1.0](cs-13-intermediary-services-preflight.md) |
 | CS-015   | [QERDS - EBW Interface - v1.0](cs-15-ebw-qtsp-wmp.md) |
 | CS-016   | [Inter-QTSP Message Relay (QERDS AS4) - v1.0](cs-16-qerds-as4.md) |
 <!--END INDEX-->
