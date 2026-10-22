@@ -1,6 +1,6 @@
 # WE BUILD - Pre-flight Conformance Specification CS-013: Relying Party Intermediaries
 
-Version 1.0 / Pre-flight Draft
+Version 1.0 / Pre-flight 
 Date: 22 October 2026
 
 **Revision history**
