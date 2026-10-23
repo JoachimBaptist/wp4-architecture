@@ -1,6 +1,6 @@
 # WE BUILD - Conformance Specification:  Credential Issuance
 
-Version 1.4
+Version 1.5
 Date: 13 October 2026
 
 **Revision history**
