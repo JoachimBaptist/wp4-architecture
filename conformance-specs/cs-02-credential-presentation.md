@@ -332,9 +332,10 @@ Verifier constructs the Presentation Request Object (as in 6.1.1).
    Unlike the interactive pattern, in which a redirect is used to return from the WU, in this case the WU sends a response back following the processing of the request. The Verifier’s process then continues automatically. (For details, see Annex A.)
 
    1. WU retrieves or validates the signed Presentation Request Object. (6.3.3)
-   2. WU generates the verifiable presentation. (6.3.5)
-   3. WU submits the verifiable presentation. (6.3.6)
-   4. WU answers with a response to the Presentation Request (6.3.7)
+   2. WU must determine whether it is permitted to share the requested attestations. (6.3.4)
+   3. WU generates the verifiable presentation. (6.3.5)
+   4. WU submits the verifiable presentation. (6.3.6)
+   5. WU answers with a response to the Presentation Request (6.3.7)
 
 3. The Verifier’s process continues automatically.
 
@@ -348,7 +349,8 @@ The same validation rules as 6.1.3 apply.
 
 ### 6.3.4 Holder Consent
 
-Not applicable to M2M
+The WU must determine whether it is permitted to share the requested attestations with the identified Verifier. 
+The method for determining this is left to the WU (or its owner).
 
 ### 6.3.5 Presentation Generation
 
@@ -666,7 +668,8 @@ sequenceDiagram
 
   Note over V,B: Phase 1: Transaction Initialization & Wait State
   activate V
-  V->>B: HTTP GET /vp_m2m_authorize (response_mode=direct_post.jwt, response_uri, state)
+  V->>V: create request_object (response_mode=direct_post.jwt, response_uri, state)
+  V->>B: HTTP GET /vp_m2m_authorize (request_uri=...)
   activate B
   Note over V: Thread enters blocking wait status.<br/>HTTP Connection remains open.
 
@@ -689,7 +692,7 @@ sequenceDiagram
 1. **Transaction Initialization (`GET /authorize`):** The Verifier establishes a connection and fires an HTTP GET request to the M2M-specific authorization endpoint of the EBW. The Verifier requests a `response_mode` of `direct_post.jwt`, specifies its routing metadata (`response_uri`), and passes a unique transaction identifier in the **`state`** parameter. The Verifier's execution thread enters a blocking wait state, keeping the HTTP connection active.
 2. **Request Fetching (`GET /request`):** The EBW processes the incoming call. Before responding, it opens a secondary, independent HTTP connection back to the Verifier to fetch the specific Request Object.
 3. **Request Delivery:** The Verifier serves the Request Object over the secondary connection back to the EBW.
-4. **Credential Issuance & Delivery (`POST /vp_token`):** The EBW evaluates the request requirements, retrieves the matching verifiable credentials and compiles the `vp_token`. Applying the requested `direct_post.jwt` mode, the EBW packages the payload into a JWE envelope and executes an HTTP POST to the Verifier's `response_url`, including the matching **`state`** parameter in the payload.
+4. **Presentation Delivery (`POST /vp_token`):** The EBW evaluates the request requirements, retrieves the matching verifiable credentials and compiles the `vp_token`. Applying the requested `direct_post.jwt` mode, the EBW packages the payload into a JWE envelope and executes an HTTP POST to the Verifier's `response_url`, including the matching **`state`** parameter in the payload.
 5. **Payload Acknowledgment:** The Verifier receives and validates the incoming `vp_token` payload on its callback endpoint. Because the Verifier is stateful and tracks the transaction in real-time, it correlates the payload directly using the **`state`** parameter. The Verifier then responds to the EBW's POST with a standard HTTP `200 OK` acknowledgment.
 6. **Transaction Closure (The Final Sync):** Having received confirmation that the Verifier successfully processed the data for this transaction, the EBW terminates the original, long-standing transaction. It sends a final HTTP `200 OK` response back through the primary connection opened in Step 1, returning the **`state`** parameter as confirmation. The Verifier’s waiting thread instantly awakes on the exact line of code that initiated the sequence, detects the successful completion for that `state`, and seamlessly proceeds with processing the received credentials. 
 
