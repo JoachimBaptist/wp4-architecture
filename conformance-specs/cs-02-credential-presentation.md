@@ -320,24 +320,20 @@ Verifier's Response Endpoint acknowledges the submission and the outcome is comm
 Verifier constructs the Presentation Request Object (as in 6.1.1).
 
 
-### 6.3.2 Wallet Unit Invocation via HTTP GET
+### 6.3.2 Wallet Unit Invocation via HTTP POST
 
 **EBW**
 
 1. The Verifier retrieves the `vp_m2m_authorization_endpoint` by using the lookup service at EDD ([12])
    If `vp_m2m_authorization_endpoint` is not present, the WU in question does not support M2M.
 
-2. The Verifier sends the Presentation Request to the WU's `vp_m2m_authorization_endpoint` over the back-channel (HTTP GET).
-   This initiates a synchronous process following the Request/Response pattern.
-   Unlike the interactive pattern, in which a redirect is used to return from the WU, in this case the WU sends a response back following the processing of the request. The Verifier’s process then continues automatically. (For details, see Annex A.)
+2. The Verifier sends the Presentation Request to the WU's `vp_m2m_authorization_endpoint` over the back-channel (HTTP POST).
 
-   1. WU retrieves or validates the signed Presentation Request Object. (6.3.3)
-   2. WU must determine whether it is permitted to share the requested attestations. (6.3.4)
-   3. WU generates the verifiable presentation. (6.3.5)
-   4. WU submits the verifiable presentation. (6.3.6)
-   5. WU answers with a response to the Presentation Request (6.3.7)
+3. The WU receives the request and determines whether it will be accepted or rejected.<br/>
+If the WU rejects the request, it MUST respond with an error (HTTP status code 405). In such a scenario, the Verifier MAY proceed to 6.1.2, provided that the mode allows for this.
 
-3. The Verifier’s process continues automatically.
+>[!NOTE]
+>Acceptance of the request does not imply that the WU will automatically process it immediately. The Verifier must be aware of this when designing the solution.
 
 >[!NOTE]
 >For `vp_m2m_authorization_endpoint` see Annex B.
@@ -363,12 +359,7 @@ WU delivers the Presentation Response as in 6.1.6, directly to the Verifier’s 
 ### 6.3.7 Result Handling
 
 Verifier's Response Endpoint acknowledges the submission and in response, the WU sends a reply to the initial Presentation Request.
-This terminates the connection with the WU.
-
-* `state`, echoing the Presentation Request's `state` parameter, where present
-
->[!NOTE]
->Although it is not strictly necessary to return correlating data in case of synchronous processing, the M2M profile that has been introduced opts to include the `state` parameter in the response.
+The Verifier does not include a `redirect_uri` in the response.
 
 # 7. Normative Requirements
 
@@ -488,21 +479,28 @@ Location: https://example.business_wallet.com/vp_authorize?request_uri=...
 
 **EBW - M2M Interaction**
 Direction: Verifier → Wallet \
-Method: GET \
+Method: POST \
 
 Example:
 
 ```
-GET /vp_m2m_authorize?request_uri=https%3A%2F%://example.com%2Frequest%2F123456789 HTTP/1.1
+POST /vp_m2m_authorize HTTP/1.1
 Host: example.business_wallet.com
 Accept: application/json
+
+client_id=redirect_uri%3Ahttps%3A%2F%2Febw.verifier.org%2Fcb
+&request=eyJrd...
 ```
 
-**Success Response Example**
+**Response** If the method (POST) is not supported
 
 ```
+HTTP/1.1 405 Method Not Allowed
+Content-Type: application/json
+Allow: GET, HEAD
+
 {
-  "state": "dftvhdgwvv4bh27"
+  "error": "method_not_allowed",
 }
 ```
 
@@ -588,7 +586,7 @@ _Same-device_
 ```
 {
   "status": "ok",
-  "redirect_uri": "https//client.example.org/cb",
+  "redirect_uri": "https//ebw.verifier.org/cb",
 }
 ```
 
@@ -652,11 +650,12 @@ An implementation **conforms to this specification as an Issuer** if it:
 
 ## A.1 Functional & Architectural Overview 
 
-This annex defines the synchronous M2M profile for **OpenID for Verifiable Presentations (OpenID4VP)** within the WE BUILD ecosystem. Unlike the standard User-to-Machine (U2M) flow — which relies on asynchronous browser redirects, user agent interactions, and decoupled callback endpoints — this M2M profile is designed for automated, system-to-system transactions between the Verifier and the European Business Wallet (EBW). 
+This annex defines the M2M profile for OpenID for Verifiable Presentations (OpenID4VP) within the WE BUILD ecosystem. Unlike the standard User-to-Machine (U2M) flow — which relies on asynchronous browser redirects, user agent interactions, and decoupled callback endpoints — this M2M profile is designed for automated, system-to-system transactions between the Verifier and the European Business Wallet (EBW). 
 
-To eliminate the need for complex polling mechanisms or state reconstruction on the Verifier's side, this profile uses a stateful Request/Response pattern. The Verifier initiates the transaction via a HTTP GET request and keeps the transport channel open. The EBW acts as the orchestrator, executing the necessary back-channel steps (fetching the request object and delivering the payload) before responding to this GET request. 
+The Verifier initiates the transaction via an HTTP POST request, passing either the Request Object directly within the request body or a reference via a `request_uri`. This initial payload dictates the subsequent execution flow. The EBW immediately responds with an HTTP 200 OK to confirm acceptance, or an HTTP 405 Method Not Allowed if the method is invalid, eliminating any blocking wait state for the Verifier during initialization. 
 
-The required modifications compared to the standard protocol have been strictly limited. This profile is explicitly designed to mirror the standard process flow described in OpenID4VP as closely as possible, keeping it fully aligned with the Conformance Specification of WE BUILD. As a result the building blocks and standards prescribed within this Conformance Specification can be optimally reused within this M2M flow. Consequently, this M2M profile introduces zero new parameters or protocol extensions. The sole difference lies in the runtime execution flow of the Verifier: while a U2M flow terminates the initial thread and forces the Verifier to reconstruct the transaction state at a decoupled callback endpoint, this stateful M2M profile maintains a synchronous thread. Execution resumes immediately on the exact same line of code that initiated the transaction as soon as the EBW closes the primary HTTP GET connection.
+The required modifications compared to the standard protocol have been strictly limited. This profile is explicitly designed to mirror the standard process flow described in OpenID4VP as closely as possible, keeping it fully aligned with the Conformance Specification of WE BUILD. As a result, the building blocks and standards prescribed within this Conformance Specification can be optimally reused within this M2M flow. Consequently, this M2M profile introduces zero new parameters or protocol extensions.
+
 
 ## A.2 Process Walkthrough
 
@@ -666,35 +665,44 @@ sequenceDiagram
   participant V as Verifier
   participant B as EBW
 
-  Note over V,B: Phase 1: Transaction Initialization & Wait State
+  Note over V,B: Phase 1: Transaction Initialization
   activate V
   V->>V: create request_object (response_mode=direct_post.jwt, response_uri, state)
-  V->>B: HTTP GET /vp_m2m_authorize (request_uri=...)
+  V->>B: HTTP POST /vp_m2m_authorize (payload: request_object OR request_uri)
   activate B
-  Note over V: Thread enters blocking wait status.<br/>HTTP Connection remains open.
+  B-->>V: HTTP 200 OK / 405 Method Not Allowed
+  deactivate V
 
-  Note over V,B: Phase 2: Request Resolution & Token Delivery
-  B->>V: HTTP GET /request-object
-  V-->>B: HTTP 200 OK (presentation_definition)
+  Note over V,B: Phase 2: Conditional Request Resolution (Only for request_uri)
+  alt Flow B: If request_uri was provided
+      B->>V: HTTP GET [request_uri]
+      V-->>B: HTTP 200 OK (JSON Request Object)
+  end
 
+  Note over V,B: Phase 3: Token Delivery & Acknowledgment
+  Note over B: Evaluates requirements &<br/>compiles credentials
   B->>V: HTTP POST [response_uri] (JWE containing vp_token + state)
+  deactivate B
+  
+  activate V
   Note over V: Decrypts & validates token.<br/>Correlates using state.
   V-->>B: HTTP 200 OK Acknowledgment
-
-  Note over V,B: Phase 3: Synchronous Handshake Closure
-  B-->>V: HTTP 200 OK (body: state)
-  deactivate B
-
-  Note over V: Thread awakes on the same line of code.<br/>Processing continues immediately.
   deactivate V
 ```
 
-1. **Transaction Initialization (`GET /authorize`):** The Verifier establishes a connection and fires an HTTP GET request to the M2M-specific authorization endpoint of the EBW. The Verifier requests a `response_mode` of `direct_post.jwt`, specifies its routing metadata (`response_uri`), and passes a unique transaction identifier in the **`state`** parameter. The Verifier's execution thread enters a blocking wait state, keeping the HTTP connection active.
-2. **Request Fetching (`GET /request`):** The EBW processes the incoming call. Before responding, it opens a secondary, independent HTTP connection back to the Verifier to fetch the specific Request Object.
-3. **Request Delivery:** The Verifier serves the Request Object over the secondary connection back to the EBW.
-4. **Presentation Delivery (`POST /vp_token`):** The EBW evaluates the request requirements, retrieves the matching verifiable credentials and compiles the `vp_token`. Applying the requested `direct_post.jwt` mode, the EBW packages the payload into a JWE envelope and executes an HTTP POST to the Verifier's `response_url`, including the matching **`state`** parameter in the payload.
-5. **Payload Acknowledgment:** The Verifier receives and validates the incoming `vp_token` payload on its callback endpoint. Because the Verifier is stateful and tracks the transaction in real-time, it correlates the payload directly using the **`state`** parameter. The Verifier then responds to the EBW's POST with a standard HTTP `200 OK` acknowledgment.
-6. **Transaction Closure (The Final Sync):** Having received confirmation that the Verifier successfully processed the data for this transaction, the EBW terminates the original, long-standing transaction. It sends a final HTTP `200 OK` response back through the primary connection opened in Step 1, returning the **`state`** parameter as confirmation. The Verifier’s waiting thread instantly awakes on the exact line of code that initiated the sequence, detects the successful completion for that `state`, and seamlessly proceeds with processing the received credentials. 
+1. **Transaction Initialization (POST /authorize):** The Verifier fires an HTTP POST request to the M2M-specific authorization endpoint of the EBW, transmitting either the complete Request Object or a `request_uri` reference in the body. The request specifies a `response_mode` of `direct_post.jwt`, routing metadata (`response_uri`), and the unique `state` parameter. The EBW immediately evaluates the request and responds directly with an HTTP 200 OK acknowledgment (or HTTP 405 if applicable), allowing the Verifier to continue execution.
+2. **Request Fetching (Conditional - GET /request):** This step is only executed if the Verifier provided a `request_uri` instead of the full Request Object in Step 1. The EBW opens a secondary, independent HTTP connection back to the Verifier's specified URI to fetch the actual Request Object.
+3. **Request Delivery (Conditional):** If triggered by Step 2, the Verifier serves the Request Object over this secondary connection back to the EBW.
+4. **Presentation Delivery (POST /vp_token):** The EBW evaluates the request requirements, retrieves the matching verifiable credentials, and compiles the `vp_token`. Applying the requested `direct_post.jwt` mode, the EBW packages the payload into a JWE envelope and executes an HTTP POST to the Verifier's `response_url`, including the matching `state` parameter in the payload.
+5. **Payload Acknowledgment:** The Verifier receives and validates the incoming `vp_token` payload on its callback endpoint. It correlates the payload directly using the `state` parameter, completes the transaction state, and responds to the EBW's POST with a standard HTTP 200 OK acknowledgment.
+
+| Step | Flow A: Direct Request Object | Flow B: Via `request_uri` |
+| :--- | :--- | :--- |
+| **1. Transaction Initialization** | Verifier sends **POST** with the full `request_object` in the body. EBW responds immediately with `200 OK` (or `405`). | Verifier sends **POST** with the `request_uri` reference in the body. EBW responds immediately with `200 OK` (or `405`). |
+| **2. Request Fetching** | *Skipped* (EBW already possesses the data). | EBW opens a back-channel connection and executes a **GET** request to the provided `request_uri`. |
+| **3. Request Delivery** | *Skipped* | Verifier serves the JSON-formatted `request_object` over this secondary connection back to the EBW. |
+| **4. Presentation Delivery** | EBW compiles the `vp_token` and executes an HTTP **POST** to the Verifier's `response_uri`. | EBW compiles the `vp_token` and executes an HTTP **POST** to the Verifier's `response_uri`. |
+| **5. Payload Acknowledgment** | Verifier validates the payload and returns an HTTP `200 OK` acknowledgment to the EBW. | Verifier validates the payload and returns an HTTP `200 OK` acknowledgment to the EBW. |
 
 
 # Annex B: Improvement Proposal: Preserving Standard OAuth for Issuance and Expanding Endpoints for Presentation
